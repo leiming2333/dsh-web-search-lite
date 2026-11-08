@@ -1,0 +1,46 @@
+name: CI
+
+# The plugin has no dependencies: there is nothing to install before testing, and
+# `npm ci` would fail without a lockfile. Both halves are plain ESM importing only
+# `node:` builtins, so the suites run on a bare Node.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows matters: the desktop build is Windows-first, and the Host half
+        # writes into a profile directory with platform path separators.
+        os: [ubuntu-latest, windows-latest]
+        node: ['22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Syntax check
+        shell: bash
+        run: |
+          node --check index.js
+          node --check client.js
+
+      - name: Host suite
+        run: node _dev/smoke.mjs
+
+      - name: Client suite
+        run: node _dev/client-smoke.mjs

@@ -1,5 +1,8 @@
 # dsh-web-search-pro
 
+[![CI](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Web search for DeepSeek Harness: the model can look up current information and open the pages it finds.
 
 Works out of the box with no API key. By default it queries DuckDuckGo, Bing 网页, 百度 and 360 at once and merges them: one engine's ranking is one opinion, and the queries the four disagree on are usually the queries worth searching. A configured search API (Tavily, Serper, Brave, Exa, Bing, SearXNG) is steadier when you have a key.

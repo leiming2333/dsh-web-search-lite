@@ -1,5 +1,8 @@
 # dsh-web-search-pro
 
+[![CI](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 给 DeepSeek Harness 装一套联网搜索：模型可以调用搜索引擎查当前信息，也可以打开搜索结果里的网页读正文。
 
 装好就能用，不需要任何 API Key。默认同时查询 DuckDuckGo、Bing 网页、百度、360 搜索四家，再合并去重：单看一家的排序只是一种意见，而四家分歧最大的，恰好就是值得搜的那些查询。愿意配一家搜索 API 的话，可以单独选它，结果更稳更快。
