@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "网络搜索",
+    "description": "免密钥联网搜索（DuckDuckGo、Bing 网页、百度、360）加网页正文读取；可用开关把内置的 web_search 从按次计费的官方搜索切到这些免费引擎。"
+  }
+}

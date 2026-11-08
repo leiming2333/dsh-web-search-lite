@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web search",
+    "description": "Key-free web search (DuckDuckGo, Bing, Baidu, 360) plus page reading, with a switch that serves the built-in web_search tool from these free engines instead of the per-call billed DeepSeek search."
+  }
+}

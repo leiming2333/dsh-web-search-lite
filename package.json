@@ -1,0 +1,64 @@
+{
+  "name": "dsh-web-search-pro",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Free-key web search for DeepSeek Harness: DuckDuckGo, Bing, Baidu, 360 (plus Tavily, Serper, Brave, Exa, Bing API, SearXNG), page fetch, and a switch that serves the native web_search tool from those engines instead of the billed DeepSeek Messages search.",
+  "license": "MIT",
+  "author": "leiming2333",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leiming2333/dsh-web-search-pro.git"
+  },
+  "homepage": "https://github.com/leiming2333/dsh-web-search-pro",
+  "bugs": {
+    "url": "https://github.com/leiming2333/dsh-web-search-pro/issues"
+  },
+  "main": "./index.js",
+  "scripts": {
+    "test": "node _dev/run-tests.mjs",
+    "install:profile": "node _dev/install.mjs",
+    "diagnose": "node _dev/diagnose.mjs"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "LICENSE",
+    "README.md",
+    "README.en.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "web-search",
+    "search-api",
+    "deepseek-harness",
+    "duckduckgo",
+    "searxng"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  }
+}
