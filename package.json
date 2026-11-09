@@ -7,11 +7,11 @@
   "author": "leiming2333",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leiming2333/dsh-web-search-pro.git"
+    "url": "git+https://github.com/leiming2333/dsh-web-search-lite.git"
   },
-  "homepage": "https://github.com/leiming2333/dsh-web-search-pro",
+  "homepage": "https://github.com/leiming2333/dsh-web-search-lite",
   "bugs": {
-    "url": "https://github.com/leiming2333/dsh-web-search-pro/issues"
+    "url": "https://github.com/leiming2333/dsh-web-search-lite/issues"
   },
   "main": "./index.js",
   "scripts": {

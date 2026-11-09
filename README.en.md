@@ -1,6 +1,6 @@
 # dsh-web-search-lite
 
-[![CI](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Web search for DeepSeek Harness: the model can look up current information and open the pages it finds.
@@ -36,7 +36,7 @@ The no-key engines are read from their public results pages — nothing to sign 
 
 npm has a **different** `dsh-web-search-pro` (by anweat): multi-engine routing plus SQLite caching and Playwright rendering, depending on `@anweat/dsh-browser`. This package is `dsh-web-search-lite` and is unrelated to it.
 
-When you are looking at the code rather than installing, the repository is still named `dsh-web-search-pro` while the package is `dsh-web-search-lite`; the bundle row id `web-search-pro` stays either way.
+The repository, the npm package and the docs all use the same name, `dsh-web-search-lite`. The one exception is the bundle row id, still `web-search-pro` — it doubles as the settings directory name and the API prefix, so renaming it would orphan existing configuration.
 
 So if DSH shows something like:
 
@@ -67,8 +67,8 @@ Install this plugin with one of the methods below; do not type the name `dsh-web
 The repository root *is* the package (`package.json` carries `dsh.bundle.patch` and `dsh.client`); `_dev/` holds development scripts and is not installed.
 
 ```bash
-git clone https://github.com/leiming2333/dsh-web-search-pro.git
-cd dsh-web-search-pro
+git clone https://github.com/leiming2333/dsh-web-search-lite.git
+cd dsh-web-search-lite
 node _dev/install.mjs --dry-run      # show what would change
 node _dev/install.mjs                # copy into the desktop profile, after backing up
 node _dev/install.mjs --profile web  # a different profile

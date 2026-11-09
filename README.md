@@ -1,6 +1,6 @@
 # dsh-web-search-lite
 
-[![CI](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 给 DeepSeek Harness 装一套联网搜索：模型可以调用搜索引擎查当前信息，也可以打开搜索结果里的网页读正文。
@@ -102,7 +102,7 @@ query
 
 npm 上有一个**同类的** `dsh-web-search-pro`（作者 anweat），功能是另一套实现：多引擎路由 + SQLite 缓存 + Playwright 渲染，并依赖 `@anweat/dsh-browser`。本包叫 `dsh-web-search-lite`，两者没有关系。
 
-只看代码不装包的话，按仓库名更容易找：这个仓库目前还叫 `dsh-web-search-pro`，包名是 `dsh-web-search-lite`，签名里的 `web-search-pro`（组合行 id）也不会变。
+只看代码不装包的话，按仓库名找：仓库、npm 包、文档里的名字都是 `dsh-web-search-lite`。只有组合行 id 还是 `web-search-pro`（它同时是设置目录名和接口前缀，改了会让已有配置失效）。
 
 所以如果你在 DSH 里看到这样的提示：
 
@@ -135,8 +135,8 @@ dsh-web-search-pro@0.2.3 与 DSH 0.2.2-rc.1 不兼容（要求 @deepseek-ai/dsh-
 仓库根目录就是插件包本身（`package.json` 里有 `dsh.bundle.patch` 与 `dsh.client`）；`_dev/` 只有开发与测试脚本，不会被装进 profile。
 
 ```bash
-git clone https://github.com/leiming2333/dsh-web-search-pro.git
-cd dsh-web-search-pro
+git clone https://github.com/leiming2333/dsh-web-search-lite.git
+cd dsh-web-search-lite
 node _dev/install.mjs --dry-run      # 先看要改什么
 node _dev/install.mjs                # 备份后写入 desktop profile
 node _dev/install.mjs --profile web  # 换一个 profile
