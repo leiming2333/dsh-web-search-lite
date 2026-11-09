@@ -30,9 +30,9 @@ let registered = false;
 try {
   const manifest = JSON.parse(fs.readFileSync(path.join(profileDir, 'package.json'), 'utf8'));
   const bundles = manifest.dsh?.profile?.bundles ?? [];
-  registered = bundles.includes('dsh-web-search-pro');
-  registered ? ok('dsh.profile.bundles 含 dsh-web-search-pro') : bad('dsh.profile.bundles 里没有 dsh-web-search-pro');
-  const dep = manifest.dependencies?.['dsh-web-search-pro'];
+  registered = bundles.includes('dsh-web-search-lite');
+  registered ? ok('dsh.profile.bundles 含 dsh-web-search-lite') : bad('dsh.profile.bundles 里没有 dsh-web-search-lite');
+  const dep = manifest.dependencies?.['dsh-web-search-lite'];
   dep === undefined ? bad('dependencies 里没有本地引用') : ok(`dependencies: ${dep}`);
 } catch (error) {
   bad(`读不到 ${path.join(profileDir, 'package.json')}：${error.message}`);
@@ -41,7 +41,7 @@ try {
 // --- 2. is the package on disk? -------------------------------------------
 
 line('\n2. 包文件');
-const packageDir = path.join(profileDir, 'node_modules', 'dsh-web-search-pro');
+const packageDir = path.join(profileDir, 'node_modules', 'dsh-web-search-lite');
 for (const file of ['package.json', 'index.js', 'client.js', 'cordis.patch.yml']) {
   fs.existsSync(path.join(packageDir, file)) ? ok(file) : bad(`${file} 缺失`);
 }
@@ -69,8 +69,22 @@ if (!fs.existsSync(statusFile)) {
     bad(`host-status.json 无法解析：${error.message}`);
   }
   if (status !== undefined) {
-    info(`版本 ${status.version} · pid ${status.pid}`);
+    // The running Host reports the version it actually mounted; the manifest says
+    // what is on disk. A gap means the process is still running older code, which
+    // explains any fix that "did not work".
+    let onDisk;
+    try {
+      onDisk = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')).version;
+    } catch {
+      onDisk = undefined;
+    }
+    info(`宿主运行版本 ${status.version} · pid ${status.pid}`);
     info(`apply 于 ${status.applyStartedAt}（记录更新于 ${status.updatedAt}）`);
+    if (onDisk !== undefined && status.version !== onDisk) {
+      bad(`磁盘上是 ${onDisk}，宿主还跑着 ${status.version} —— 需要重启才能换上新代码`);
+    } else if (onDisk !== undefined) {
+      ok(`与磁盘版本一致（${onDisk}）`);
+    }
     const tools = status.tools ?? [];
     tools.length === 2 ? ok(`工具已注册：${tools.join(', ')}`) : bad(`工具只注册了：${tools.join(', ') || '（无）'}`);
     if (status.error !== null && status.error !== undefined) bad(`注册错误：${status.error}`);

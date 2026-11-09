@@ -1,4 +1,4 @@
-// Smoke test for dsh-web-search-pro (Host half).
+// Smoke test for dsh-web-search-lite (Host half).
 //
 // The plugin imports nothing from the DSH installation, so this suite needs no
 // stubs: it points DSH_HOME at a temporary directory, mocks fetch, and drives the
@@ -69,7 +69,9 @@ await check('the package declares a bundle patch and a web client half', () => {
   const manifest = JSON.parse(
     fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
   );
-  assert.equal(manifest.name, 'dsh-web-search-pro');
+  assert.equal(manifest.name, 'dsh-web-search-lite');
+  // The Host reads its version from this manifest; a literal copy would drift.
+  assert.equal(plugin.__test.HOST_VERSION, manifest.version, 'HOST_VERSION must equal the manifest version');
   assert.equal(manifest.type, 'module');
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml');
   assert.equal(manifest.dsh.client.platform, 'web');
@@ -82,7 +84,7 @@ await check('the bundle patch inserts the row under its own id', () => {
   const patch = fs.readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
   assert.match(patch, /^-\s*insert:/m);
   assert.match(patch, /id:\s*web-search-pro/);
-  assert.match(patch, /name:\s*'dsh-web-search-pro'/);
+  assert.match(patch, /name:\s*'dsh-web-search-lite'/);
 });
 
 await check('the Host half imports only node builtins', () => {

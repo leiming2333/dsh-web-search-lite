@@ -1,4 +1,4 @@
-// Smoke test for the browser half of dsh-web-search-pro.
+// Smoke test for the browser half of dsh-web-search-lite.
 //
 // Loads client.js behind a fake module loader with a minimal React (element
 // construction, hook stubs with injectable initial state) and asserts the slot
@@ -58,7 +58,7 @@ await import('../client.js');
 
 await check('the browser module registers itself under the package name', () => {
   assert.ok(captured !== undefined, 'ModuleLoader.load was never called');
-  assert.equal(captured.id, 'dsh-web-search-pro');
+  assert.equal(captured.id, 'dsh-web-search-lite');
   assert.equal(typeof captured.factory, 'function');
 });
 

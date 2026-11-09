@@ -1,6 +1,6 @@
 {
-  "name": "dsh-web-search-pro",
-  "version": "1.1.0",
+  "name": "dsh-web-search-lite",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Free-key web search for DeepSeek Harness: DuckDuckGo, Bing, Baidu, 360 (plus Tavily, Serper, Brave, Exa, Bing API, SearXNG), page fetch, and a switch that serves the native web_search tool from those engines instead of the billed DeepSeek Messages search.",
@@ -8,11 +8,11 @@
   "author": "leiming2333",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leiming2333/dsh-web-search-pro.git"
+    "url": "git+https://github.com/leiming2333/dsh-web-search-lite.git"
   },
-  "homepage": "https://github.com/leiming2333/dsh-web-search-pro",
+  "homepage": "https://github.com/leiming2333/dsh-web-search-lite",
   "bugs": {
-    "url": "https://github.com/leiming2333/dsh-web-search-pro/issues"
+    "url": "https://github.com/leiming2333/dsh-web-search-lite/issues"
   },
   "main": "./index.js",
   "scripts": {

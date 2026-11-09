@@ -27,18 +27,32 @@
  * `/api/web-search-pro/*` routes, which keeps both halves in sync without needing
  * the config-forms transport.
  *
- * @module dsh-web-search-pro
+ * @module dsh-web-search-lite
  */
 
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-/** Request header sent upstream; bumped with the package version. */
-const USER_AGENT = 'dsh-web-search-pro/1.1.0'
+/**
+ * Package version, read from the manifest rather than repeated as a literal.
+ *
+ * Three copies of a version number drift the moment one of them is bumped — this
+ * one did, and the only place the mismatch surfaced was `host-status.json`, where
+ * it looks like a stale Host half rather than a typo. Reading the manifest keeps
+ * the status file, the upstream User-Agent and `package.json` in agreement.
+ */
+const HOST_VERSION = (() => {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+    return typeof manifest.version === 'string' && manifest.version !== '' ? manifest.version : '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+})()
 
-/** Version stamp written into `host-status.json`, so a stale Host half is visible. */
-const HOST_VERSION = '1.1.0'
+/** Request header sent upstream; bumped with the package version. */
+const USER_AGENT = `dsh-web-search-lite/${HOST_VERSION}`
 
 /** Route prefix this plugin owns on the Host web server. */
 const API_PREFIX = '/api/web-search-pro'
@@ -473,7 +487,7 @@ function collect(rows) {
  * A desktop browser UA string.
  *
  * Search engines answer a bot-looking UA with a challenge page or a 403, so the
- * default `dsh-web-search-pro` token is replaced only on this path; API calls keep
+ * default `dsh-web-search-lite` token is replaced only on this path; API calls keep
  * identifying themselves honestly.
  */
 const BROWSER_UA =

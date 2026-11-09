@@ -1,5 +1,19 @@
 # 变更记录
 
+## 1.2.0 — 2026-11-09
+
+### 改名
+
+- 包名从 `dsh-web-search-pro` 改为 **`dsh-web-search-lite`**。npm 上已有一个同名但无关的 `dsh-web-search-pro`（作者 anweat，Playwright + SQLite 实现），它的 `peerDependencies` 排除了 DSH 0.2.2，安装时会被 DSH 拒绝并提示「不兼容」——那不是本插件。改名是为了消除这个歧义。
+- 同步更新 `cordis.patch.yml` 的 `name`、浏览器模块 id、`USER_AGENT`、安装与诊断脚本，以及两份 README。
+- 组合行 id 仍是 `web-search-pro`，因此 `~/.dsh/web-search-pro/settings.json` 与 `/api/web-search-pro/*` 不变，已有配置继续有效。
+
+### 修正
+
+- 版本号改为从 `package.json` 读取，不再在 `USER_AGENT` 和 `HOST_VERSION` 各写一份。三处副本已经漂过一次，表现为 `host-status.json` 里报告旧版本。
+- README 更正「装完必须重启」的说法：首次安装需要重启（组合列表在启动时读），之后更新已装插件的文件由 DSH 的文件监听重载宿主半身，浏览器半身刷新页面即可。
+- 测试新增一条断言：`HOST_VERSION` 必须等于清单版本，防止再次漂移。
+
 ## 1.1.0 — 2026-11-08
 
 ### 新增

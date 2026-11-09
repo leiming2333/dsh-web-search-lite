@@ -1,4 +1,4 @@
-// Runs both smoke suites for dsh-web-search-pro.
+// Runs both smoke suites for dsh-web-search-lite.
 //
 // The plugin imports nothing from the DSH installation (see the header of
 // index.js for why), so no stubs are needed and nothing is written into the

@@ -1,8 +1,8 @@
-// Installs dsh-web-search-pro into a DSH profile.
+// Installs dsh-web-search-lite into a DSH profile.
 //
 // What it touches, in order, each reversible:
-//   1. <profile>/plugins/dsh-web-search-pro       the source copy a `file:` dep points at
-//   2. <profile>/node_modules/dsh-web-search-pro  the copy Node resolves at runtime
+//   1. <profile>/plugins/dsh-web-search-lite       the source copy a `file:` dep points at
+//   2. <profile>/node_modules/dsh-web-search-lite  the copy Node resolves at runtime
 //   3. <profile>/package.json                     dependencies + dsh.profile.bundles
 //
 // It never edits cordis.patch.yml: the bundle carries its own patch, and the
@@ -21,7 +21,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // The repository root *is* the package: package.json, index.js, client.js and the
 // bundle patch live beside this `_dev` folder, and `_dev` is not part of a delivery.
 const source = path.join(here, '..');
-const NAME = 'dsh-web-search-pro';
+const NAME = 'dsh-web-search-lite';
 
 /** Names that never belong in an installed copy. */
 const SKIP = new Set(['node_modules', '_dev', 'package-lock.json', 'pnpm-lock.yaml']);

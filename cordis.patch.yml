@@ -1,12 +1,12 @@
-# dsh-web-search-pro bundle patch.
+# dsh-web-search-lite bundle patch.
 #
 # One insert row mounts the Host half (the web_search_api / web_fetch_api tools).
 # The browser half is declared by `dsh.client` in package.json and binds to the
 # row whose name is the bare package name.
 #
-# The row id doubles as the Settings namespace: the browser half reads and
-# writes this same row's volatile config through `ctx.configForms.get('web-search-pro')`.
+# The row id is what the Host reads as its own settings namespace; changing it
+# would orphan an existing <DSH_HOME>/web-search-pro/settings.json.
 - insert:
     - id: web-search-pro
-      name: 'dsh-web-search-pro'
+      name: 'dsh-web-search-lite'
       config: {}

@@ -1,6 +1,6 @@
-# dsh-web-search-pro
+# dsh-web-search-lite
 
-[![CI](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 给 DeepSeek Harness 装一套联网搜索：模型可以调用搜索引擎查当前信息，也可以打开搜索结果里的网页读正文。
@@ -98,26 +98,50 @@ query
 
 ## 安装
 
+### 先确认装的是哪一个
+
+npm 上有一个**同类的** `dsh-web-search-pro`（作者 anweat），功能是另一套实现：多引擎路由 + SQLite 缓存 + Playwright 渲染，并依赖 `@anweat/dsh-browser`。本包叫 `dsh-web-search-lite`，两者没有关系。
+
+所以如果你在 DSH 里看到这样的提示：
+
+```
+dsh-web-search-pro@0.2.3 与 DSH 0.2.2-rc.1 不兼容（要求 @deepseek-ai/dsh-tools>=0.2.0-rc.2 <0.2.1-0 || …
+```
+
+那是 `dsh-web-search-pro` 的 0.2.3 版本，不是本插件。它的 `peerDependencies` 把上界写成了 `<0.2.2-0`，而 DSH 现在跑的是 `0.2.2-rc.1`，落在范围外，所以被拒绝。本包的声明是 `^0.2.0-rc.1`，在 DSH 的判定方式（`includePrerelease: true`）下覆盖 `0.2.2-rc.1`：
+
+```
+✓ @deepseek-ai/cordis        实际 4.1.0        声明 ^4.0.2
+✓ @deepseek-ai/dsh-tools     实际 0.2.2-rc.1   声明 ^0.2.0-rc.1
+✓ @deepseek-ai/schemastery   实际 3.19.0       声明 ^3.18.4
+```
+
+要装本插件，用下面这些方式之一，不要输入 `dsh-web-search-pro` 这个名字。
+
+### 装法
+
 仓库根目录就是插件包本身（`package.json` 里有 `dsh.bundle.patch` 与 `dsh.client`）；`_dev/` 只有开发与测试脚本，不会被装进 profile。
 
 ```bash
-git clone https://github.com/leiming2333/dsh-web-search-pro.git
-cd dsh-web-search-pro
+git clone https://github.com/leiming2333/dsh-web-search-lite.git
+cd dsh-web-search-lite
 node _dev/install.mjs --dry-run      # 先看要改什么
 node _dev/install.mjs                # 备份后写入 desktop profile
 node _dev/install.mjs --profile web  # 换一个 profile
 node _dev/install.mjs --uninstall    # 回滚
 ```
 
-脚本只做三件可回滚的事：把包复制到 `<profile>/plugins/` 与 `<profile>/node_modules/`，在 profile 的 `package.json` 里补 `dependencies`（`file:` 本地引用）与 `dsh.profile.bundles`，改写前备份为 `package.json.bak-<时间戳>`。它**不碰** `cordis.patch.yml`，那是你自己的层。
+脚本只做三件可回滚的事：把包复制到 `<profile>/plugins/` 与 `<profile>/node_modules/`，在 profile 的 `package.json` 里补 `dependencies`（`file:` 本地引用）与 `dsh.profile.bundles`，改写前备份为 `package.json.bak-<时间戳>`。它不碰 `cordis.patch.yml`，那是你自己的层。
 
-也可以在对话里让 DSH 自己装：「把 /path/to/dsh-web-search-pro 这个 bundle 装上」，它会用 `plugin_manager` 的 `install_bundle`。
+也可以在对话里让 DSH 自己装：「把 /path/to/dsh-web-search-lite 这个 bundle 装上」，它会用 `plugin_manager` 的 `install_bundle`。
 
-装完要**重启 DeepSeek Harness**：宿主半身是 Node 模块，新包不会热加载；浏览器半身随页面刷新加载。
+### 装完什么时候要重启
+
+首次安装必须重启 DeepSeek Harness：profile 的组合列表变了，那是在启动时读的。之后只改插件文件时，DSH 的文件监听会重载宿主半身（`host-status.json` 里的 `applyStartedAt` 会跟着更新），浏览器半身仍需刷新页面。
 
 > **默认不改你现有的搜索选择。** 第一次启动只注册两个新工具（`web_search_api`、`web_fetch_api`）和一个设置页，内置 `web_search` 仍走你原来的提供方。想让它免费，去 **设置 → 网络搜索** 把「使用 DeepSeek 官方网页搜索」关掉——见下一节。
 
-> 两者的加载时机不同，容易误导人：刷新页面就能让 **设置 → 网络搜索** 出现，但那条 `/api/web-search-pro/settings` 请求需要宿主进程里跑着插件。如果设置页出现了却报 `HTTP 404`，就是宿主没重启（要完全退出应用再启动，不是刷新页面）。重启后 `~/.dsh/web-search-pro/host-status.json` 会记录挂载到哪一步。
+> 两者的加载时机不同，容易误导人：刷新页面就能让 **设置 → 网络搜索** 出现，但那条 `/api/web-search-pro/settings` 请求需要宿主进程里跑着插件。如果设置页出现了却报 `HTTP 404`，先看 `~/.dsh/web-search-pro/host-status.json`：没有这个文件说明宿主没加载过，需要完全退出应用再启动（不是刷新页面）。
 
 ## 官方 Web 搜索开关
 
@@ -153,6 +177,8 @@ DSH 原生有两个 web 工具：`web_search` 和 `web_fetch`。它们本身不�
 ## 配置
 
 设置页里的每一项都存在 `<DSH_HOME>/web-search-pro/settings.json`（默认 `~/.dsh/web-search-pro/settings.json`），改完即时生效，不用重启。
+
+目录名和路由前缀用的是组合行 id `web-search-pro`，不随包名变化；改包名不会动这个文件。
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -201,7 +227,7 @@ DSH 原生有两个 web 工具：`web_search` 和 `web_fetch`。它们本身不�
 
 **关键决定：这个插件不 import 任何 `@deepseek-ai/*` 包。**
 
-这不是风格选择，是加载机制决定的。DSH 加载 profile 里的 bundle 时用「双锚点」解析名字（先 dsh 安装目录，再 profile 目录），但 **bundle 内部的 `import` 由 Node 自己从 bundle 所在位置向上找 `node_modules`**。从 `~/.dsh/profiles/<p>/node_modules/…` 出发，DSH 安装目录里的包不在解析链上：
+原因是加载机制。DSH 加载 profile 里的 bundle 时用「双锚点」解析名字（先 dsh 安装目录，再 profile 目录），但 bundle 内部的 `import` 由 Node 自己从 bundle 所在位置向上找 `node_modules`。从 `~/.dsh/profiles/<p>/node_modules/…` 出发，DSH 安装目录里的包不在解析链上：
 
 ```bash
 cd ~/.dsh/profiles/desktop
@@ -209,7 +235,7 @@ node --input-type=module -e "console.log(import.meta.resolve('@deepseek-ai/dsh-t
 # ERR_MODULE_NOT_FOUND
 ```
 
-所以 `import { defineTool } from '@deepseek-ai/dsh-tools'` 会在加载期抛错，整个插件根本挂不上。本机那个第三方插件 `dsh-our-free-model` 也是同样的零依赖写法。
+所以 `import { defineTool } from '@deepseek-ai/dsh-tools'` 会在加载期抛错，插件加载不起来。本机那个第三方插件 `dsh-our-free-model` 也是同样的零依赖写法。
 
 由此带来的两个替代：
 
@@ -235,7 +261,7 @@ node --input-type=module -e "console.log(import.meta.resolve('@deepseek-ai/dsh-t
 |---|---|
 | 内置「插件 → 网页搜索」卡片不见了 | 有人给 `web-search-deepseek` 这一行写了 `disabled: true`。别那样关官方搜索：那个页面绑在这个提供方的命名空间上，行一卸载整页就没了。改用本插件的开关（`officialSearch`），它只切 `web.searchProvider`，provider 一直挂着。 |
 | 拨了开关，但「DSH 当前选中」没变 | 两种可能：选中值不是官方也不是本插件（`foreign`，按设计不抢）；或宿主没有 `web`/`settings` 服务，`host-status.json` 里的 `officialSearch`、`webSearchProvider` 字段会写明是哪一种。 |
-| 设置页里没有「网络搜索」这一栏 | 浏览器半身没加载。确认 profile `package.json` 的 `dsh.profile.bundles` 含 `dsh-web-search-pro`，重启并刷新页面。 |
+| 设置页里没有「网络搜索」这一栏 | 浏览器半身没加载。确认 profile `package.json` 的 `dsh.profile.bundles` 含 `dsh-web-search-lite`，重启并刷新页面。 |
 | 设置页显示「读取设置失败」 | 宿主没挂 `/api/web-search-pro`。先看 DSH 日志里以 `web-search-pro:` 开头的行，或 `~/.dsh/web-search-pro/host-status.json`（也可以跑 `node _dev/diagnose.mjs`），确认宿主半身跑到了哪一步；常见原因是 Web 服务未启动（该组合下工具仍可用，只是没有设置页）。 |
 | 工具报「未知的搜索提供方」 | `provider` 写了不支持的值，改成错误信息里列出的 id。 |
 | 401 / 403 | 密钥无效，或该密钥没有这个接口的权限。 |
@@ -257,7 +283,7 @@ node _dev/run-tests.mjs
 ## 文件
 
 ```
-dsh-web-search-pro/          # 仓库根目录就是这个包
+dsh-web-search-lite/          # 仓库根目录就是这个包
 ├── package.json             # bundle 清单 + dsh.client 声明
 ├── cordis.patch.yml         # 插入 web-search-pro 这一行
 ├── index.js                 # Host：设置存取、两个工具、provider 适配、官方/免费接管、HTTP API

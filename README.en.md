@@ -1,6 +1,6 @@
-# dsh-web-search-pro
+# dsh-web-search-lite
 
-[![CI](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml/badge.svg)](https://github.com/leiming2333/dsh-web-search-lite/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Web search for DeepSeek Harness: the model can look up current information and open the pages it finds.
@@ -61,11 +61,33 @@ Without `web` or `settings` services the switch goes inert and says so in `host-
 
 ## Install
 
+### Make sure you are installing the right package
+
+npm has a **different** `dsh-web-search-pro` (by anweat): multi-engine routing plus SQLite caching and Playwright rendering, depending on `@anweat/dsh-browser`. This package is `dsh-web-search-lite` and is unrelated to it.
+
+So if DSH shows something like:
+
+```
+dsh-web-search-pro@0.2.3 is incompatible with DSH 0.2.2-rc.1 (requires @deepseek-ai/dsh-tools>=0.2.0-rc.2 <0.2.1-0 || …
+```
+
+that is version 0.2.3 of `dsh-web-search-pro`, not this plugin. Its `peerDependencies` cap the range at `<0.2.2-0` while DSH now runs `0.2.2-rc.1`, so it falls outside. This package declares `^0.2.0-rc.1`, which covers `0.2.2-rc.1` under DSH's check (`includePrerelease: true`):
+
+```
+✓ @deepseek-ai/cordis        actual 4.1.0       declared ^4.0.2
+✓ @deepseek-ai/dsh-tools     actual 0.2.2-rc.1  declared ^0.2.0-rc.1
+✓ @deepseek-ai/schemastery   actual 3.19.0      declared ^3.18.4
+```
+
+Install this plugin with one of the methods below; do not type the name `dsh-web-search-pro`.
+
+### How to install
+
 The repository root *is* the package (`package.json` carries `dsh.bundle.patch` and `dsh.client`); `_dev/` holds development scripts and is not installed.
 
 ```bash
-git clone https://github.com/leiming2333/dsh-web-search-pro.git
-cd dsh-web-search-pro
+git clone https://github.com/leiming2333/dsh-web-search-lite.git
+cd dsh-web-search-lite
 node _dev/install.mjs --dry-run      # show what would change
 node _dev/install.mjs                # copy into the desktop profile, after backing up
 node _dev/install.mjs --profile web  # a different profile
@@ -74,9 +96,13 @@ node _dev/install.mjs --uninstall    # roll back
 
 The script does three reversible things: copies the package into `<profile>/plugins/` and `<profile>/node_modules/`, adds a `file:` dependency and a `dsh.profile.bundles` entry to the profile's `package.json` (backed up first), and never touches your `cordis.patch.yml`.
 
-You can also ask DSH itself: “install the bundle at /path/to/dsh-web-search-pro” uses `plugin_manager`'s `install_bundle`.
+You can also ask DSH itself: “install the bundle at /path/to/dsh-web-search-lite” uses `plugin_manager`'s `install_bundle`.
 
-**Restart DeepSeek Harness afterwards.** The Host half is a Node module and is not hot-loaded; the browser half reloads with the page. Refreshing is not enough — quitting the app and starting it again is.
+### When a restart is needed
+
+The first install needs a restart: the profile's bundle list changed, and that list is read at startup. Updating files of an already-installed plugin is picked up by DSH's file watcher for the Host half (`applyStartedAt` in `host-status.json` moves with it); the browser half still needs a page refresh.
+
+If Settings → Web search appears but shows `HTTP 404`, check `~/.dsh/web-search-pro/host-status.json`. No such file means the Host half never loaded — quit the app completely and start it again; a page refresh will not do it.
 
 ## Settings
 
@@ -136,7 +162,7 @@ So the two contracts are re-implemented locally (`localDefineTool` mirrors the v
 
 | Symptom | Cause / fix |
 |---|---|
-| No “Web search” section in Settings | The browser half did not load: check `dsh.profile.bundles` includes `dsh-web-search-pro`, restart, reload the page. |
+| No “Web search” section in Settings | The browser half did not load: check `dsh.profile.bundles` includes `dsh-web-search-lite`, restart, reload the page. |
 | The page loads but reports `HTTP 404` | The Host half is not running: the app was not restarted after install (a page refresh is not enough). |
 | The built-in “Plugins → Web search” card disappeared | Someone set `disabled: true` on `web-search-deepseek`. Do not disable that row; use this plugin's switch instead. |
 | The switch does not move “DSH currently selects” | The selection is `foreign` (not managed by the switch), or the Host has no `web`/`settings` service — `host-status.json` says which. |
@@ -154,7 +180,7 @@ node _dev/run-tests.mjs
 ## Files
 
 ```
-dsh-web-search-pro/
+dsh-web-search-lite/
 ├── package.json         # bundle manifest + dsh.client declaration
 ├── cordis.patch.yml     # inserts the web-search-pro row
 ├── index.js             # Host: settings, tools, provider adapters, handoff, HTTP API
