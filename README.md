@@ -122,11 +122,21 @@ dsh-web-search-pro@0.2.3 与 DSH 0.2.2-rc.1 不兼容（要求 @deepseek-ai/dsh-
 
 ### 装法
 
+**从 npm 装**（已发布，最省事）：
+
+```bash
+dsh plugin add dsh-web-search-lite
+```
+
+包在 npm 上是 [`dsh-web-search-lite`](https://www.npmjs.com/package/dsh-web-search-lite)，走 registry，不需要代理。
+
+**从仓库装**（要改代码、或想跟 main 分支时）：
+
 仓库根目录就是插件包本身（`package.json` 里有 `dsh.bundle.patch` 与 `dsh.client`）；`_dev/` 只有开发与测试脚本，不会被装进 profile。
 
 ```bash
 git clone https://github.com/leiming2333/dsh-web-search-pro.git
-cd dsh-web-search-lite
+cd dsh-web-search-pro
 node _dev/install.mjs --dry-run      # 先看要改什么
 node _dev/install.mjs                # 备份后写入 desktop profile
 node _dev/install.mjs --profile web  # 换一个 profile

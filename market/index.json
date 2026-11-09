@@ -11,15 +11,24 @@
   "metadata": {
     "categories": {
       "search": {
-        "title": { "en": "Search", "zh": "搜索" }
+        "title": {
+          "en": "Search",
+          "zh": "搜索"
+        }
       }
     },
     "labels": {
       "no-key": {
-        "title": { "en": "No API key", "zh": "免密钥" }
+        "title": {
+          "en": "No API key",
+          "zh": "免密钥"
+        }
       },
       "agent-tools": {
-        "title": { "en": "Agent tools", "zh": "Agent 工具" }
+        "title": {
+          "en": "Agent tools",
+          "zh": "Agent 工具"
+        }
       }
     }
   },
@@ -52,16 +61,17 @@
           "page fetch",
           "no api key"
         ],
-        "labels": ["no-key", "agent-tools"]
+        "labels": [
+          "no-key",
+          "agent-tools"
+        ]
       },
       "versions": [
         {
           "version": "1.3.0",
           "publishTimestamp": 1794211760,
           "source": {
-            "type": "git",
-            "url": "https://github.com/leiming2333/dsh-web-search-pro",
-            "commit": "f805664c9599a2dccf0a7296edbe9d738c878f28"
+            "type": "npm"
           }
         }
       ]

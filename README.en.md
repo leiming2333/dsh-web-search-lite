@@ -60,7 +60,7 @@ The repository root *is* the package (`package.json` carries `dsh.bundle.patch` 
 
 ```bash
 git clone https://github.com/leiming2333/dsh-web-search-pro.git
-cd dsh-web-search-lite
+cd dsh-web-search-pro
 node _dev/install.mjs --dry-run      # show what would change
 node _dev/install.mjs                # copy into the desktop profile, after backing up
 node _dev/install.mjs --profile web  # a different profile
