@@ -1,8 +1,8 @@
 {
   "name": "dsh-web-search-lite",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "type": "module",
-  "description": "Free-key web search for DeepSeek Harness: DuckDuckGo, Bing, Baidu and 360 queried at once with merged results, plus page fetch. Optional API providers (Tavily, Serper, Brave, Exa, Bing API, SearXNG). Adds two new tools; it does not touch the built-in web_search.",
+  "description": "Zero-dependency web search for DeepSeek Harness: DuckDuckGo, Bing, Baidu and 360 queried at once with merged results, plus page fetch. Optional API providers (Tavily, Serper, Brave, Exa, Bing API, SearXNG). No Playwright, no SQLite, no native build; two new tools that leave the built-in web_search alone.",
   "license": "MIT",
   "author": "leiming2333",
   "repository": {

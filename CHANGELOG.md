@@ -1,5 +1,16 @@
 # 变更记录
 
+## 1.3.1 — 2026-11-09
+
+### 打包
+
+- 仓库改名为 `dsh-web-search-lite`，`package.json` 的 `repository`、`homepage`、`bugs` 与两份 README、市场索引里的链接一并更新。npm 上 1.3.0 的这几个字段仍是旧仓库名（靠 GitHub 的 301 跳转），这个版本把它们修正。
+- 描述改为强调定位：零依赖、无 Playwright、无 SQLite、无原生编译。npm 上 `dsh-web-search-pro` 是另一套实现（anweat 的，依赖 Playwright + SQLite），描述里点名差异可以减少装错。
+
+### 其他
+
+- 市场索引的地址从 `cdn.jsdelivr.net` 换成 `fastly.jsdelivr.net`：主域名在部分网络下 TLS 握手失败，三个镜像（fastly / gcore / testingcf）都可用。
+
 ## 1.3.0 — 2026-11-09
 
 ### 移除
