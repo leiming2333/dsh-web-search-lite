@@ -22,9 +22,22 @@ const remove = argv.includes('--remove');
 const profileArg = argv.indexOf('--profile');
 const profile = profileArg >= 0 ? argv[profileArg + 1] : 'desktop';
 
-/** Index URL jsDelivr serves from this repository's `market/` directory. */
-const INDEX_URL =
-  'https://cdn.jsdelivr.net/gh/leiming2333/dsh-web-search-pro@main/market/index.json';
+/**
+ * Index URL jsDelivr serves from this repository's `market/` directory.
+ *
+ * Derived from the manifest's `repository.url` rather than hard-coded: renaming the
+ * GitHub repository is a link-only change, and a literal copy here would silently
+ * keep pointing at the old name — which 404s once the rename lands.
+ */
+const INDEX_URL = (() => {
+  const manifest = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const raw = manifest.repository?.url ?? '';
+  const match = /github\.com[:/]([^/]+)\/([^/#.]+)/i.exec(raw);
+  if (match === null) {
+    throw new Error(`package.json 的 repository.url 里读不出 GitHub 仓库：${raw}`);
+  }
+  return `https://cdn.jsdelivr.net/gh/${match[1]}/${match[2]}@main/market/index.json`;
+})();
 
 const home = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh');
 const profileDir = path.join(home, 'profiles', profile);
