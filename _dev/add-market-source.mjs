@@ -36,7 +36,9 @@ const INDEX_URL = (() => {
   if (match === null) {
     throw new Error(`package.json 的 repository.url 里读不出 GitHub 仓库：${raw}`);
   }
-  return `https://cdn.jsdelivr.net/gh/${match[1]}/${match[2]}@main/market/index.json`;
+  // fastly.jsdelivr.net rather than cdn.jsdelivr.net: the canonical host does not
+  // resolve on every network in CN, while the Fastly mirror serves the same content.
+  return `https://fastly.jsdelivr.net/gh/${match[1]}/${match[2]}@main/market/index.json`;
 })();
 
 const home = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh');
