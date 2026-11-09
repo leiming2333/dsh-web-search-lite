@@ -56,6 +56,14 @@ Install this plugin with one of the methods below; do not type the name `dsh-web
 
 ### How to install
 
+**From npm** (published — the easy path): the package is [`dsh-web-search-lite`](https://www.npmjs.com/package/dsh-web-search-lite) on the public registry, so no proxy is needed. Any of these works:
+
+- **Plugins → Discover**, find “Web Search Lite”, click Install (this repository's index is already configured)
+- Ask in a chat: “install dsh-web-search-lite” and let `plugin_manager` do it
+- If the `dsh` CLI is on your PATH: `dsh plugin add dsh-web-search-lite` (the desktop build does not install that command by default)
+
+**From the repository** (when you want to change the code, or track `main`):
+
 The repository root *is* the package (`package.json` carries `dsh.bundle.patch` and `dsh.client`); `_dev/` holds development scripts and is not installed.
 
 ```bash

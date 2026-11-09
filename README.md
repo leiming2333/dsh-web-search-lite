@@ -124,11 +124,11 @@ dsh-web-search-pro@0.2.3 与 DSH 0.2.2-rc.1 不兼容（要求 @deepseek-ai/dsh-
 
 **从 npm 装**（已发布，最省事）：
 
-```bash
-dsh plugin add dsh-web-search-lite
-```
+包在 npm 上是 [`dsh-web-search-lite`](https://www.npmjs.com/package/dsh-web-search-lite)，走 registry，不需要代理。三种装法任选：
 
-包在 npm 上是 [`dsh-web-search-lite`](https://www.npmjs.com/package/dsh-web-search-lite)，走 registry，不需要代理。
+- 打开 **插件 → 发现**，找到「网络搜索 Lite」点安装（本仓库的索引已配好）
+- 在对话里说一句「装 dsh-web-search-lite」，让它调 `plugin_manager`
+- 若 `dsh` CLI 已在 PATH 里：`dsh plugin add dsh-web-search-lite`（桌面版默认不装这个命令）
 
 **从仓库装**（要改代码、或想跟 main 分支时）：
 
