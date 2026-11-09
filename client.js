@@ -30,7 +30,6 @@ window.__ModuleLoader__.load({
 			'  "language": "",',
 			'  "includeAnswer": true,',
 			'  "enableFetch": true,',
-			'  "officialSearch": false,',
 			'  "fetchMaxChars": 20000',
 			'}',
 		].join('\n');
@@ -47,14 +46,6 @@ window.__ModuleLoader__.load({
 			providerHint:
 				'Each API provider has its own key and quota. The no-key engines are read from their public results page: nothing to sign up for, but a redesign or bot check can break them for a while. Pick a single engine only if one keeps failing.',
 			noKeyNeeded: 'This engine needs no key.',
-			officialSearch: 'Use DeepSeek’s official web search',
-			officialSearchHint:
-				'The built-in web_search tool answers from DeepSeek Messages search, which bills one extra model round per search. Turn this off and that same tool is served by this plugin’s free engines. The built-in “Web search” card stays available either way: this switch only changes which provider DSH selects.',
-			officialSearchNow: 'DSH currently selects: ',
-			officialSearchIdle: 'not configured',
-			officialSearchForeign: 'DSH selects a provider this switch does not manage; it was left untouched.',
-			officialSearchUnmanaged:
-				'The Host exposed no settings service, so this switch records your choice but cannot apply it here.',
 			fanoutHint:
 				'Queries DuckDuckGo, Bing 网页, 百度 and 360 at the same time, then merges and de-duplicates what they return. Slower than one engine (about the slowest of them), and steadier: one engine failing only costs its share of the results.',
 			scrapeHint:
@@ -128,13 +119,6 @@ window.__ModuleLoader__.load({
 			providerHint:
 				'带 API Key 的提供方各有独立密钥与额度。免密钥引擎直接读它的公开结果页：不用注册，但页面改版或反爬时可能暂时失效。单个引擎老失败时再单独选它排查。',
 			noKeyNeeded: '这个引擎不需要密钥。',
-			officialSearch: '使用 DeepSeek 官方网页搜索',
-			officialSearchHint:
-				'内置的 web_search 工具走 DeepSeek Messages 搜索，每次搜索会多跑一轮模型（按生成计费）。关掉它，这个工具就改由本插件的免密钥引擎提供服务。不管开关怎样，内置的「网页搜索」卡片都还在——这个开关只改变 DSH 选中哪个搜索提供方。',
-			officialSearchNow: 'DSH 当前选中：',
-			officialSearchIdle: '未配置',
-			officialSearchForeign: 'DSH 选中的提供方不归这个开关管，已保持不动。',
-			officialSearchUnmanaged: '宿主没有提供 settings 服务，这个开关只会记录你的选择，暂时无法在这里生效。',
 			fanoutHint:
 				'同时查询 DuckDuckGo、Bing 网页、百度和 360，再把结果合并去重。比只用一个引擎慢一点（取决于最慢的那个），但更稳：某个引擎失败只损失它那一份。',
 			scrapeHint: '结果来自该引擎的公开网页。如果它开始拒绝自动访问，换个引擎或配置 API Key。',
@@ -251,7 +235,6 @@ window.__ModuleLoader__.load({
 				language: String(value?.language ?? ''),
 				includeAnswer: value?.includeAnswer !== false,
 				enableFetch: value?.enableFetch !== false,
-				officialSearch: value?.officialSearch !== false,
 				fetchMaxChars: String(value?.fetchMaxChars ?? 20000),
 			};
 		}
@@ -281,7 +264,6 @@ window.__ModuleLoader__.load({
 				language: draft.language.trim(),
 				includeAnswer: draft.includeAnswer,
 				enableFetch: draft.enableFetch,
-				officialSearch: draft.officialSearch,
 				fetchMaxChars: wholeNumber(draft.fetchMaxChars, 1000, 200000),
 			};
 			return Object.values(shape).includes(undefined) ? undefined : shape;
@@ -540,7 +522,7 @@ window.__ModuleLoader__.load({
 					const payload = await callApi('/settings');
 					if (!alive.current) return;
 					const view = payload.settings ?? {};
-					setState({ status: 'ready', view, dshSearchProvider: payload.dshSearchProvider ?? null });
+					setState({ status: 'ready', view });
 					setDraft(pick(view));
 					setSaved(pick(view));
 					setKeyTouched(false);
@@ -606,13 +588,6 @@ window.__ModuleLoader__.load({
 			}
 
 			const view = state.view ?? {};
-			const selected = state.dshSearchProvider ?? null;
-			const handoffNote =
-				selected === null
-					? t('officialSearchUnmanaged')
-					: selected !== 'web-search-pro' && selected !== 'deepseek-official'
-						? t('officialSearchForeign')
-						: undefined;
 			const provider = providerOf(draft.provider);
 			const pending = submitted(draft);
 			const baseline = submitted(saved);
@@ -646,7 +621,7 @@ window.__ModuleLoader__.load({
 					const payload = await callApi('/settings', body);
 					if (!alive.current) return;
 					const next = payload.settings ?? {};
-					setState({ status: 'ready', view: next, dshSearchProvider: payload.dshSearchProvider ?? null });
+					setState({ status: 'ready', view: next });
 					setDraft(pick(next));
 					setSaved(pick(next));
 					setKeyTouched(false);
@@ -687,19 +662,6 @@ window.__ModuleLoader__.load({
 				h(
 					'div',
 					{ style: styles.card },
-					h(ToggleRow, {
-						label: t('officialSearch'),
-						hint: t('officialSearchHint'),
-						checked: draft.officialSearch,
-						disabled: busy,
-						onChange: (next) => edit('officialSearch', next),
-					}),
-					h(
-						'p',
-						{ style: styles.hint },
-						`${t('officialSearchNow')}${selected ?? t('officialSearchIdle')}`,
-						handoffNote === undefined ? '' : ` · ${handoffNote}`,
-					),
 					h(
 						Field,
 						{ label: t('provider'), hint: t('providerHint') },

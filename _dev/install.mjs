@@ -125,6 +125,40 @@ if (JSON.stringify(manifest, null, 2) === before) {
   if (!dryRun) fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+// --- 3. undo what 1.2.0 and earlier did to someone else's config ------------
+
+/**
+ * Point `web.searchProvider` back at the shipped route if an older version left it
+ * on ours.
+ *
+ * Versions up to 1.2.0 registered a `web-search-pro` search provider and rewrote
+ * this field through `ctx.settings.mutate` when the user turned the official route
+ * off. 1.3.0 drops that capability, so a leftover `web-search-pro` would name a
+ * provider nothing registers — and the built-in `web_search` would fail with
+ * `WEB_PROVIDER_CONFIGURED_MISSING` instead of searching.
+ *
+ * Only that exact value is touched. Anything else in the user's patch layer is
+ * theirs, including a deliberate choice of another provider.
+ */
+function restoreShippedSearchProvider() {
+  const patchPath = path.join(profileDir, 'cordis.patch.yml');
+  if (!fs.existsSync(patchPath)) return;
+  const text = fs.readFileSync(patchPath, 'utf8');
+  if (!/searchProvider:\s*web-search-pro\b/.test(text)) return;
+  say('');
+  say('发现旧版本留下的 web.searchProvider = web-search-pro（1.3.0 不再注册该提供方）：');
+  backup(patchPath);
+  if (!dryRun) {
+    fs.writeFileSync(
+      patchPath,
+      text.replace(/(searchProvider:\s*)web-search-pro\b/g, '$1deepseek-official'),
+    );
+  }
+  say('  已改回 deepseek-official，内置 web_search 恢复官方路由');
+}
+
+restoreShippedSearchProvider();
+
 say('');
 say('完成。重启 DeepSeek Harness 生效，然后打开 设置 → 网络搜索。');
 say('免密钥引擎（DuckDuckGo / Bing 网页 / 百度 / 360）默认即可用；想更稳可以再填一家 API Key。');

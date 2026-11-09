@@ -1,5 +1,22 @@
 # 变更记录
 
+## 1.3.0 — 2026-11-09
+
+### 移除
+
+- 删掉**接管内置 `web_search`** 的整套能力：注册到 `ctx.web` 的 `web-search-pro` 搜索提供方、通过 `ctx.settings.mutate` 改写 `web.searchProvider`、设置页里的「使用 DeepSeek 官方网页搜索」开关、`officialSearch` 字段，以及 `/api/settings` 响应里的 `dshSearchProvider`。
+- 理由：官方客户端已经有「插件 → 网页搜索」页管理搜索提供方，插件不必再插一手。这个插件回归「提供两个新工具 + 一个自己的设置页」，不碰内置 `web_search`。
+
+### 兼容
+
+- 旧的 `settings.json` 里若仍有 `officialSearch`，读取时被忽略，不会报错；下次保存会自然丢掉这个键。
+- 组合行 id 仍是 `web-search-pro`，`~/.dsh/web-search-pro/settings.json` 与 `/api/web-search-pro/*` 不变。
+
+### 其他
+
+- 测试 94 → 90 项（删掉 4 条覆盖提供方注册、`settings.mutate`、`foreign` 不抢、开关往返的用例）。
+- README 删除「官方 Web 搜索开关」整章、配置表对应行与两条相关排错。
+
 ## 1.2.0 — 2026-11-09
 
 ### 改名

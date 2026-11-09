@@ -7,9 +7,9 @@
 
 装好就能用，不需要任何 API Key。默认同时查询 DuckDuckGo、Bing 网页、百度、360 搜索四家，再合并去重：单看一家的排序只是一种意见，而四家分歧最大的，恰好就是值得搜的那些查询。愿意配一家搜索 API 的话，可以单独选它，结果更稳更快。
 
-它还能**接管内置的 `web_search`**：DSH 自带的 `web_search` 走 DeepSeek Messages 搜索，一次搜索是一次完整的模型请求，按生成计费。设置页里有一个开关，关掉官方路由后，同一个工具改由上面这些免密钥引擎提供结果——工具名、提示词、调用方式都不变，只是账单不再增长。**默认保持 DSH 原样（不接管）**，要不要省钱由你决定，详见[官方 Web 搜索开关](#官方-web-搜索开关)。
+插件提供的是两个**新**工具（`web_search_api`、`web_fetch_api`），不接管、不修改 DSH 自带的 `web_search`。内置搜索怎么配、用哪个提供方，仍然由官方的「插件 → 网页搜索」页管。
 
-换引擎、填密钥、调条数、开关都在 **设置 → 网络搜索** 里，保存后下一条消息生效，不用重启。设置页还有一个**测试连接**按钮，用已保存的配置跑一次真实查询。
+换引擎、填密钥、调条数都在 **设置 → 网络搜索** 里，保存后下一条消息生效，不用重启。设置页还有一个**测试连接**按钮，用已保存的配置跑一次真实查询。
 
 ---
 
@@ -139,40 +139,9 @@ node _dev/install.mjs --uninstall    # 回滚
 
 首次安装必须重启 DeepSeek Harness：profile 的组合列表变了，那是在启动时读的。之后只改插件文件时，DSH 的文件监听会重载宿主半身（`host-status.json` 里的 `applyStartedAt` 会跟着更新），浏览器半身仍需刷新页面。
 
-> **默认不改你现有的搜索选择。** 第一次启动只注册两个新工具（`web_search_api`、`web_fetch_api`）和一个设置页，内置 `web_search` 仍走你原来的提供方。想让它免费，去 **设置 → 网络搜索** 把「使用 DeepSeek 官方网页搜索」关掉——见下一节。
+> **不碰你现有的搜索配置。** 插件只注册两个新工具（`web_search_api`、`web_fetch_api`）和一个设置页，内置 `web_search` 的提供方选择、官方的「插件 → 网页搜索」页都保持原样。
 
 > 两者的加载时机不同，容易误导人：刷新页面就能让 **设置 → 网络搜索** 出现，但那条 `/api/web-search-pro/settings` 请求需要宿主进程里跑着插件。如果设置页出现了却报 `HTTP 404`，先看 `~/.dsh/web-search-pro/host-status.json`：没有这个文件说明宿主没加载过，需要完全退出应用再启动（不是刷新页面）。
-
-## 官方 Web 搜索开关
-
-DSH 原生有两个 web 工具：`web_search` 和 `web_fetch`。它们本身不含引擎，真正的检索由 `@deepseek-ai/dsh-web` 选中的**搜索提供方**完成，而内置组合把选择固定成了：
-
-```yaml
-- id: web
-  name: '@deepseek-ai/dsh-web'
-  config:
-    searchProvider: deepseek-official   # DeepSeek Messages 搜索
-    fetchProvider: http                 # 本地 HTTP 抓取，免费
-```
-
-`deepseek-official`（`@deepseek-ai/dsh-web-search-deepseek`）的做法是把搜索当成一次辅助模型请求：DeepSeek 在**完整的一轮 Messages 调用**里执行服务端检索，所以每次 `web_search` 都是延迟加生成 token。它不会报错，也不会提示你贵，只是账单会变。
-
-插件在 `web` 服务里注册了自己的提供方 `web-search-pro`，设置页的**使用 DeepSeek 官方网页搜索**开关就是切这个选择：
-
-| 开关 | `web.searchProvider` | `web_search` 谁在答 | 费用 |
-|---|---|---|---|
-| **开（默认）** | `deepseek-official` | DeepSeek Messages 搜索 | 按模型轮次计费 |
-| 关 | `web-search-pro` | 本插件的免密钥引擎（与 `web_search_api` 同一套） | 免费 |
-
-几个刻意的选择：
-
-- **默认开，是刻意的。** 装一个搜索插件就改掉别人 DSH 的搜索后端，不合适；默认保持 DSH 原样，谁想省钱谁自己关。关掉之后写进的是你的 profile，重启也还在。
-- **不卸载官方 provider，只切选择。** 早期实现用 `- id: web-search-deepseek` + `disabled: true` 关掉它，结果内置的 **插件 → 网页搜索** 卡片整页消失——那个页面绑在提供方的命名空间上。现在 provider 一直挂着，卡片一直在。
-- **写入走 `ctx.settings`，不直接改文件。** 那就是内置卡片自己的写入路径：同样校验 volatile 字段、同样带修订号拒绝陈旧写入、同样落到 profile 的 `cordis.patch.yml`。所以拖到卡片里手动改也认，两边看到的是同一个值。
-- **不抢别人的选择。** 如果 DSH 选中的既不是 `deepseek-official` 也不是 `web-search-pro`（比如你在卡片里切到了新版 Search API），开关只报告 `foreign` 并保持不动——静默改写用户明确选过的提供方，比什么都不做更糟。
-- **先挂后指、先指后卸。** 关官方时先注册自己的 provider 再把选择指过去，开官方时先把选择指回官方再注销自己：选择永远不指向一个不存在的提供方。
-
-没有 `web` 或 `settings` 服务的组合里开关自动失效（`host-status.json` 会写明是哪一种），工具照常可用。
 
 ## 配置
 
@@ -190,7 +159,6 @@ DSH 原生有两个 web 工具：`web_search` 和 `web_fetch`。它们本身不�
 | `language` | 空 | 语言提示，如 `zh-CN`。 |
 | `includeAnswer` | `true` | 是否请求生成式摘要。传给 Tavily；Serper 的 answerBox 本来就随结果返回。 |
 | `enableFetch` | `true` | 是否注册 `web_fetch_api`。 |
-| `officialSearch` | `true` | 是否让内置 `web_search` 走 DeepSeek 官方搜索（计费）。`false` 表示由本插件的提供方作答。 |
 | `fetchMaxChars` | `20000` | 单页保留字符数（1000–200000）。 |
 
 所有值在写入前都会做类型与范围归一化，手改 JSON 也不会把插件带进非法状态。
@@ -220,10 +188,6 @@ DSH 原生有两个 web 工具：`web_search` 和 `web_fetch`。它们本身不�
 │    设置 → 网络搜索（读 /settings，写 /settings，/test）    │
 └──────────────────────────────────────────────────────────┘
 ```
-
-**接管官方工具走的是两个服务，不是两个 import。**
-
-`ctx.web.registerSearchProvider({ id, available, ready, search })`（可选注入，disposer 随 fiber 释放）注册免密钥提供方；`ctx.settings.mutate('web', [{ op: 'set', path: ['searchProvider'], value }], revision)`（可选注入）切换选择。两者都是通过 `ctx` 拿到的服务，符合下面那条零依赖规则；缺任何一个，插件照常提供 `web_search_api`，只是开关失效并在 `host-status.json` 里说明。
 
 **关键决定：这个插件不 import 任何 `@deepseek-ai/*` 包。**
 
@@ -259,8 +223,6 @@ node --input-type=module -e "console.log(import.meta.resolve('@deepseek-ai/dsh-t
 
 | 现象 | 原因 / 处理 |
 |---|---|
-| 内置「插件 → 网页搜索」卡片不见了 | 有人给 `web-search-deepseek` 这一行写了 `disabled: true`。别那样关官方搜索：那个页面绑在这个提供方的命名空间上，行一卸载整页就没了。改用本插件的开关（`officialSearch`），它只切 `web.searchProvider`，provider 一直挂着。 |
-| 拨了开关，但「DSH 当前选中」没变 | 两种可能：选中值不是官方也不是本插件（`foreign`，按设计不抢）；或宿主没有 `web`/`settings` 服务，`host-status.json` 里的 `officialSearch`、`webSearchProvider` 字段会写明是哪一种。 |
 | 设置页里没有「网络搜索」这一栏 | 浏览器半身没加载。确认 profile `package.json` 的 `dsh.profile.bundles` 含 `dsh-web-search-lite`，重启并刷新页面。 |
 | 设置页显示「读取设置失败」 | 宿主没挂 `/api/web-search-pro`。先看 DSH 日志里以 `web-search-pro:` 开头的行，或 `~/.dsh/web-search-pro/host-status.json`（也可以跑 `node _dev/diagnose.mjs`），确认宿主半身跑到了哪一步；常见原因是 Web 服务未启动（该组合下工具仍可用，只是没有设置页）。 |
 | 工具报「未知的搜索提供方」 | `provider` 写了不支持的值，改成错误信息里列出的 id。 |
@@ -277,7 +239,7 @@ node _dev/run-tests.mjs
 
 94 项检查，不需要任何桩包，因为插件本来就没有外部依赖：
 
-- **Host（68）**：清单与 patch 结构、只 import node 内置、两个工具的声明与准入、`localDefineTool` 的校验、五家 API 与四个抓取引擎的响应解析（含去重/截断/单次覆盖/跳转还原/推广位过滤/实体解码）、**聚合的轮转合并与 URL 去重、部分失败与全失败**、错误文案分级、HTML→文本、渲染输出、设置的归一化/原子读写/损坏降级、密钥掩码与不回传、挂载自诊断、**官方/免费接管（提供方注册、`settings.mutate` 的目标值与修订号、`foreign` 不抢、开关往返）**，以及 `/api` 的读写/测试/同源拒绝/坏 JSON/前缀剥离。
+- **Host（68）**：清单与 patch 结构、只 import node 内置、两个工具的声明与准入、`localDefineTool` 的校验、五家 API 与四个抓取引擎的响应解析（含去重/截断/单次覆盖/跳转还原/推广位过滤/实体解码）、**聚合的轮转合并与 URL 去重、部分失败与全失败**、错误文案分级、HTML→文本、渲染输出、设置的归一化/原子读写/损坏降级、密钥掩码与不回传、挂载自诊断，以及 `/api` 的读写/测试/同源拒绝/坏 JSON/前缀剥离。
 - **Client（26）**：字典键一致性、`settings.section` 注册、引擎分组、loading/error/ready 三态渲染、404 时的重启指引与手动配置兜底、免密钥引擎下密钥字段自动禁用、密钥徽标与清除按钮、脏检查与按钮启用、测试结果展示，以及 `pick`/`submitted`/`changesBetween`/`callApi`。
 
 ## 文件
@@ -286,7 +248,7 @@ node _dev/run-tests.mjs
 dsh-web-search-lite/          # 仓库根目录就是这个包
 ├── package.json             # bundle 清单 + dsh.client 声明
 ├── cordis.patch.yml         # 插入 web-search-pro 这一行
-├── index.js                 # Host：设置存取、两个工具、provider 适配、官方/免费接管、HTTP API
+├── index.js                 # Host：设置存取、两个工具、provider 适配、HTTP API
 ├── client.js                # Client：设置 → 网络搜索
 ├── locale/{en,zh}.json      # 插件清单里的标题与描述
 ├── icon.svg                 # 原创图标

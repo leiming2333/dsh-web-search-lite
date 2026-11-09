@@ -99,17 +99,6 @@ if (!fs.existsSync(statusFile)) {
       bad(`webServer 状态：${status.webServer}（注入回调可能没有执行）`);
     }
 
-    // --- official/free handoff (1.1.0+) ------------------------------------
-    if (status.officialSearch !== undefined) {
-      if (status.officialSearchError) {
-        bad(`官方/免费接管失败：${status.officialSearchError}`);
-      } else if (String(status.officialSearch).startsWith('free:no-web-service')) {
-        info('官方搜索接管：这个组合没有 web 服务，内置 web_search 保持原样');
-      } else {
-        ok(`官方搜索接管：${status.officialSearch}`);
-      }
-      info(`免密钥提供方：${status.webSearchProvider ?? '（未记录）'}`);
-    }
   }
 }
 
@@ -117,12 +106,13 @@ if (!fs.existsSync(statusFile)) {
 
 line('\n4. 设置文件');
 if (!fs.existsSync(settingsFile)) {
-  info('还没有 settings.json，首次读取用默认值（provider=all，officialSearch=false）');
+  info('还没有 settings.json，首次读取用默认值（provider=all）');
 } else {
   try {
     const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     ok(`provider=${settings.provider} maxResults=${settings.maxResults} timeoutMs=${settings.timeoutMs}`);
     info(`apiKey：${settings.apiKey === '' ? '（空）' : '（已配置，不显示）'}`);
+    if ('officialSearch' in settings) info('officialSearch 是 1.3.0 之前的字段，现在被忽略；下次保存会消失');
   } catch (error) {
     bad(`settings.json 不是合法 JSON：${error.message}`);
   }

@@ -7,7 +7,7 @@ Web search for DeepSeek Harness: the model can look up current information and o
 
 Works out of the box with no API key. By default it queries DuckDuckGo, Bing 网页, 百度 and 360 at once and merges them: one engine's ranking is one opinion, and the queries the four disagree on are usually the queries worth searching. A configured search API (Tavily, Serper, Brave, Exa, Bing, SearXNG) is steadier when you have a key.
 
-It can also **take over the built-in `web_search`**. DSH's native `web_search` runs DeepSeek Messages search, where one search is a full model round — billed as generation. A switch in the settings page repoints that tool at the free engines above; the tool name, its prompt guidance and the call shape stay identical, only the bill stops growing. **The default keeps DSH as it was**; opting into the free route is your call. See [Official web search switch](#official-web-search-switch).
+The plugin adds two **new** tools (`web_search_api`, `web_fetch_api`); it does not take over or modify DSH's own `web_search`. Which provider the built-in search uses is still managed by the official Plugins → Web search page.
 
 Engines, keys, result counts and the switch all live in **Settings → Web search** and apply from the next message; no restart. The page also has a **Test connection** button that runs one real query with the saved settings.
 
@@ -29,35 +29,6 @@ Both report the next step on failure — a challenge page suggests another engin
 **API key:** `tavily`, `serper` (Google results), `brave`, `exa`, `bing` (Bing Web Search API).
 
 The no-key engines are read from their public results pages — nothing to sign up for, and the page structure belongs to the engine, so a redesign or bot check can break one for a while. Failures are reported per engine; in `all`, one engine failing costs only its share of the results.
-
-## Official web search switch
-
-`@deepseek-ai/dsh-web` runs the built-in `web_search` through a selected provider, and the shipped composition pins it:
-
-```yaml
-- id: web
-  name: '@deepseek-ai/dsh-web'
-  config:
-    searchProvider: deepseek-official   # DeepSeek Messages search
-    fetchProvider: http                 # local HTTP fetch, free
-```
-
-`deepseek-official` performs the search inside a full Messages request, so every call costs latency plus generated tokens.
-
-| Switch | `web.searchProvider` | Who answers `web_search` | Cost |
-|---|---|---|---|
-| **On (default)** | `deepseek-official` | DeepSeek Messages search | billed per model round |
-| Off | `web-search-pro` | this plugin's free engines | free |
-
-Deliberate choices:
-
-- **On by default.** Installing a search plugin must not silently rewrite someone else's search backend; the free route is explicit.
-- **The provider row is never unmounted.** Disabling `web-search-deepseek` would take the built-in **Plugins → Web search** card with it (that page binds to the provider's namespace). The switch only changes which provider is selected.
-- **Writes go through `ctx.settings`**, the same path the built-in card uses: same volatile-field validation, same revision guard, same persistence into the profile's `cordis.patch.yml`.
-- **A third-party choice is never overwritten.** If DSH selects something that is neither id, the switch reports `foreign` and leaves it alone.
-- **Mount before pointing, unpoint before unmounting.** The selection never names an unregistered provider.
-
-Without `web` or `settings` services the switch goes inert and says so in `host-status.json`; the tools keep working.
 
 ## Install
 
@@ -118,7 +89,6 @@ Stored in `<DSH_HOME>/web-search-pro/settings.json` (default `~/.dsh/web-search-
 | `language` | empty | Language hint, e.g. `zh-CN`. |
 | `includeAnswer` | `true` | Ask for a generated summary (Tavily). |
 | `enableFetch` | `true` | Register `web_fetch_api`. |
-| `officialSearch` | `true` | Let the built-in `web_search` use DeepSeek's official search (billed). |
 | `fetchMaxChars` | `20000` | Characters kept per page (1000–200000). |
 
 Values are normalized on write, so a hand-edited file cannot put the plugin in an invalid state.
@@ -133,15 +103,13 @@ Or just ask in chat: “search today's tech news”.
 
 The Host half imports only `node:fs`, `node:os`, `node:path` — no `@deepseek-ai/*` package. That is not style: DSH loads a profile bundle by resolving the bundle name from two anchors, but the bundle's own `import`s are resolved by Node from the bundle's location, where the DSH installation is not on the chain. A single `import { defineTool } from '@deepseek-ai/dsh-tools'` would throw at load time and the whole plugin would fail to mount.
 
-So the two contracts are re-implemented locally (`localDefineTool` mirrors the validator/wrapper; settings use the plugin's own JSON file plus `/api/web-search-pro` routes), and the official/free handoff uses services through `ctx` — `ctx.web.registerSearchProvider()` and `ctx.settings.mutate()` — which is allowed because it is not an import.
+So the two contracts are re-implemented locally: `localDefineTool` mirrors the validator/wrapper, and settings use the plugin's own JSON file plus `/api/web-search-pro` routes.
 
 ```
 ┌─ Host: index.js ─────────────────────────────────────────┐
 │  settings.json  ← atomic write                           │
 │  web_search_api ─→ runSearch ─→ SEARCHERS[id]            │
 │  web_fetch_api  ─→ runFetch  ─→ htmlToText               │
-│  web provider   ─→ freeSearchProvider() (optional)       │
-│  official switch─→ ctx.settings.mutate('web', …)         │
 │  ctx.inject(['webServer']) → /api/web-search-pro/*       │
 └──────────────────────┬───────────────────────────────────┘
                        │ same-origin JSON
@@ -175,7 +143,7 @@ So the two contracts are re-implemented locally (`localDefineTool` mirrors the v
 node _dev/run-tests.mjs
 ```
 
-94 checks, no stub packages needed, because the plugin has no external dependencies: 68 for the Host half (manifest and patch shape, node-only imports, tool declarations and admission, provider parsers, fan-out merge and de-duplication, partial and total failure, error grading, HTML→text, settings normalization/atomic write/corruption fallback, key masking, mount diagnostics, the official/free handoff, and the `/api` routes) and 26 for the browser half (dictionary keys, slot registration, three render states, 404 guidance, dirty tracking, test results, `pick`/`submitted`/`changesBetween`/`callApi`).
+90 checks, no stub packages needed, because the plugin has no external dependencies: 64 for the Host half (manifest and patch shape, node-only imports, tool declarations and admission, provider parsers, fan-out merge and de-duplication, partial and total failure, error grading, HTML→text, settings normalization/atomic write/corruption fallback, key masking, mount diagnostics, and the `/api` routes) and 26 for the browser half (dictionary keys, slot registration, three render states, 404 guidance, dirty tracking, test results, `pick`/`submitted`/`changesBetween`/`callApi`).
 
 ## Files
 

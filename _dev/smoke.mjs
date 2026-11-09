@@ -45,11 +45,6 @@ const {
   stripTags,
   absoluteUrl,
   unwrapRedirect,
-  FREE_PROVIDER_ID,
-  OFFICIAL_PROVIDER_ID,
-  freeSearchProvider,
-  selectSearchProvider,
-  currentSearchProvider,
 } = plugin.__test;
 
 const results = [];
@@ -106,27 +101,6 @@ await check('no static or dynamic import reaches a host package', () => {
 const registered = [];
 const injectedServices = [];
 const routes = [];
-const providers = [];
-const mutations = [];
-let selection = 'deepseek-official';
-
-const webService = {
-  registerSearchProvider(provider) {
-    providers.push(provider);
-    return () => {
-      const index = providers.indexOf(provider);
-      if (index >= 0) providers.splice(index, 1);
-    };
-  },
-};
-
-const settingsService = {
-  describe: () => [{ ns: 'web', revision: 4, value: { searchProvider: selection, fetchProvider: 'http' } }],
-  async mutate(ns, ops, revision) {
-    mutations.push({ ns, ops, revision });
-    selection = ops[0].value;
-  },
-};
 
 const ctx = {
   logger: { info: () => {}, warn: () => {} },
@@ -137,11 +111,8 @@ const ctx = {
   },
   inject(services, callback) {
     injectedServices.push(services);
-    // Simulate a composition that has the web service, the settings service and a
-    // web server: the bundle's own desktop composition.
+    // Simulate a composition that has a web server: the bundle's own desktop setup.
     callback({
-      web: webService,
-      settings: settingsService,
       webServer: {
         register: (route, label) => {
           routes.push({ route, label });
@@ -156,8 +127,6 @@ const ctx = {
 };
 
 plugin.apply(ctx);
-// The handoff runs on its own microtask; give it one turn before asserting.
-await new Promise((resolve) => setTimeout(resolve, 0));
 
 await check('apply registers both tools and the settings API', () => {
   assert.equal(registered.length, 2);
@@ -165,72 +134,10 @@ await check('apply registers both tools and the settings API', () => {
     registered.map((row) => row.definition.name),
     ['web_search_api', 'web_fetch_api'],
   );
-  assert.deepEqual(injectedServices, [['web'], ['settings'], ['webServer']]);
+  assert.deepEqual(injectedServices, [['webServer']], 'the plugin only asks for a web server');
   assert.equal(routes.length, 1);
   assert.equal(routes[0].route.kind, 'prefix');
   assert.equal(routes[0].route.path, '/api/web-search-pro');
-});
-
-await check('the default leaves the official route alone', () => {
-  assert.equal(normalizeSettings({}).officialSearch, true, 'installing must not rewrite the provider silently');
-  assert.equal(providers.length, 0, 'no free provider is registered while the official route is selected');
-  assert.deepEqual(mutations, [], 'nothing is written when the selection is already official');
-  assert.equal(selection, OFFICIAL_PROVIDER_ID);
-});
-
-await check('turning the official route off mounts ours and repoints the selection', async () => {
-  const handler = routes[0].route.handler;
-  const post = (body) =>
-    new Promise((resolve) => {
-      const response = {
-        status: 0,
-        headers: {},
-        headersSent: false,
-        body: '',
-        writeHead(status) {
-          this.status = status;
-          this.headersSent = true;
-        },
-        end(payload) {
-          this.body = payload ?? '';
-          resolve({ status: this.status, json: JSON.parse(this.body) });
-        },
-      };
-      handler(
-        fakeRequest({
-          method: 'POST',
-          url: '/api/web-search-pro/settings',
-          headers: { host: 'x' },
-          body: JSON.stringify(body),
-        }),
-        response,
-      );
-    });
-
-  const off = await post({ officialSearch: false });
-  assert.equal(off.status, 200);
-  assert.equal(off.json.settings.officialSearch, false);
-  assert.equal(selection, FREE_PROVIDER_ID, 'the free provider is selected');
-  assert.equal(providers.length, 1, 'the free provider is registered before the selection moves');
-  assert.equal(off.json.dshSearchProvider, FREE_PROVIDER_ID, 'the page learns the live selection');
-  const provider = providers[0];
-  assert.equal(provider.id, FREE_PROVIDER_ID);
-  assert.equal(provider.available(), true);
-  assert.equal(provider.ready(), true);
-  assert.equal(typeof provider.search, 'function');
-
-  const on = await post({ officialSearch: true });
-  assert.equal(on.json.settings.officialSearch, true);
-  assert.equal(selection, OFFICIAL_PROVIDER_ID, 'the official route is selected again');
-  assert.equal(providers.length, 0, 'the free provider is unregistered after the selection moves');
-});
-
-await check('a foreign provider selection is left alone', async () => {
-  selection = 'deepseek-search-api';
-  const outcome = await selectSearchProvider(settingsService, false);
-  assert.equal(outcome.state, 'foreign');
-  assert.equal(selection, 'deepseek-search-api');
-  selection = 'deepseek-official';
 });
 
 await check('web_search_api declares a JSON Schema with query required', () => {
@@ -1039,29 +946,6 @@ await check('all: total failure reports every engine reason', async () => {
       return true;
     },
   );
-});
-
-await check('the free provider maps a search onto the web seam result', async () => {
-  globalThis.fetch = async (url) => ({
-    ok: true,
-    status: 200,
-    url: String(url),
-    headers: new Headers({}),
-    text: async () => DDG_PAGE,
-  });
-  writeSettings({ ...normalizeSettings({}), provider: 'duckduckgo' });
-  const provider = freeSearchProvider();
-  assert.equal(provider.id, 'web-search-pro');
-  const value = await provider.search({ query: 'harness', maxResults: 2 }, new AbortController().signal);
-  assert.ok(Array.isArray(value.sources));
-  assert.ok(value.sources.length >= 1 && value.sources.length <= 2);
-  assert.ok(value.sources.every((row) => typeof row.url === 'string' && row.url.startsWith('https://')));
-  assert.equal('content' in value, false, 'a scraped engine has no provider answer');
-  await assert.rejects(
-    () => provider.search({ query: '   ' }, new AbortController().signal),
-    /request\.query/,
-  );
-  writeSettings(normalizeSettings({}));
 });
 
 // --- mount diagnostics ----------------------------------------------------

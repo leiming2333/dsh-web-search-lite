@@ -196,10 +196,6 @@ const DEFAULTS = {
   language: '',
   includeAnswer: true,
   enableFetch: true,
-  // On by default: installing a search plugin must not silently rewrite which
-  // provider the built-in `web_search` uses. The free route is an explicit opt-in
-  // — see the README's "官方 Web 搜索开关" for what it costs either way.
-  officialSearch: true,
   fetchMaxChars: 20000,
 }
 
@@ -292,7 +288,6 @@ function normalizeSettings(raw) {
     language: String(source.language ?? DEFAULTS.language).trim(),
     includeAnswer: source.includeAnswer === undefined ? DEFAULTS.includeAnswer : source.includeAnswer === true,
     enableFetch: source.enableFetch === undefined ? DEFAULTS.enableFetch : source.enableFetch === true,
-    officialSearch: source.officialSearch === undefined ? DEFAULTS.officialSearch : source.officialSearch === true,
     fetchMaxChars: clamp(toInteger(source.fetchMaxChars, DEFAULTS.fetchMaxChars), 1000, FETCH_BODY_LIMIT),
   }
 }
@@ -1313,7 +1308,6 @@ function publicSettings(settings, problem) {
     language: settings.language,
     includeAnswer: settings.includeAnswer,
     enableFetch: settings.enableFetch,
-    officialSearch: settings.officialSearch,
     fetchMaxChars: settings.fetchMaxChars,
     ...(problem === undefined ? {} : { problem }),
   }
@@ -1390,7 +1384,7 @@ function mergeSettings(current, patch) {
   for (const field of ['maxResults', 'timeoutMs', 'fetchMaxChars']) {
     if (patch[field] !== undefined) next[field] = patch[field]
   }
-  for (const field of ['includeAnswer', 'enableFetch', 'officialSearch']) {
+  for (const field of ['includeAnswer', 'enableFetch']) {
     if (patch[field] !== undefined) next[field] = patch[field]
   }
   if (patch.apiKey !== undefined && patch.apiKey !== null) next.apiKey = patch.apiKey
@@ -1409,12 +1403,9 @@ function mergeSettings(current, patch) {
  * cross-site page must not be able to rewrite the endpoint a key is sent to.
  *
  * @param logger - the plugin logger, for background failures.
- * @param hooks - Host-side callbacks: `onSaved` runs after a settings write so the
- *   official/free handoff follows the new record, `currentProvider` reports what
- *   the `web` service selects right now.
  * @returns a Node request handler.
  */
-function createApiHandler(logger, hooks = {}) {
+function createApiHandler(logger) {
   return async (request, response) => {
     try {
       if (!sameOrigin(request)) return sendJson(response, 403, { error: 'cross-origin request refused' })
@@ -1427,10 +1418,7 @@ function createApiHandler(logger, hooks = {}) {
 
       if (request.method === 'GET' && isSettings) {
         const { settings, problem } = readSettings()
-        return sendJson(response, 200, {
-          settings: publicSettings(settings, problem),
-          dshSearchProvider: hooks.currentProvider?.() ?? null,
-        })
+        return sendJson(response, 200, { settings: publicSettings(settings, problem) })
       }
 
       if (request.method === 'POST' && isSettings) {
@@ -1438,16 +1426,8 @@ function createApiHandler(logger, hooks = {}) {
         const { settings: current } = readSettings()
         const settings = mergeSettings(current, patch)
         writeSettings(settings)
-        logger?.info?.(`web-search-pro: settings saved (provider=${settings.provider}, official=${String(settings.officialSearch)})`)
-        try {
-          await hooks.onSaved?.(settings)
-        } catch (error) {
-          logger?.warn?.(`web-search-pro: official/free handoff failed: ${error?.message ?? error}`)
-        }
-        return sendJson(response, 200, {
-          settings: publicSettings(settings),
-          dshSearchProvider: hooks.currentProvider?.() ?? null,
-        })
+        logger?.info?.(`web-search-pro: settings saved (provider=${settings.provider})`)
+        return sendJson(response, 200, { settings: publicSettings(settings) })
       }
 
       if (request.method === 'POST' && pathname === '/test') {
@@ -1483,123 +1463,6 @@ function createApiHandler(logger, hooks = {}) {
       return sendJson(response, 500, { error: error?.message ?? String(error) })
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Official search handoff
-//
-// The DSH-native `web_search` tool executes through whichever provider the `web`
-// service has selected. The shipped composition pins that selection to
-// `deepseek-official`, which runs one full Messages request per search — the
-// model round *is* the search, so every call is billed as generation.
-//
-// This plugin can serve the same seam for free: register its own provider into
-// `web` and point the selection at it. `web_search` keeps working, the paid
-// route stays idle, and — unlike disabling the `web-search-deepseek` row — the
-// built-in Plugins → 网页搜索 card stays mounted, because that card is where the
-// DeepSeek API alternatives are configured.
-//
-// The switch owns exactly one field of another plugin's config,
-// `web.searchProvider`, which is the same field the built-in card writes. Writes
-// go through `ctx.settings` so they carry the same validation, the same revision
-// guard, and the same persistence into the profile patch as a card save.
-// ---------------------------------------------------------------------------
-
-/** Search provider id this plugin registers into `web`. */
-const FREE_PROVIDER_ID = 'web-search-pro'
-
-/** Search provider id the shipped composition pins for the paid Messages route. */
-const OFFICIAL_PROVIDER_ID = 'deepseek-official'
-
-/** Settings namespace of the `web` service. */
-const WEB_SETTINGS_NAMESPACE = 'web'
-
-/**
- * The provider object registered into `ctx.web` when the official route is off.
- *
- * `available()` answers whether the engines can run at all; `ready()` is the
- * per-request credential gate, and this path needs no credentials, so it always
- * answers true. `search()` maps this plugin's result shape onto the seam's:
- * `{ sources, content? }`, with `truncated` left to the seam's own cap.
- *
- * @returns a `web` search provider.
- */
-function freeSearchProvider() {
-  return {
-    id: FREE_PROVIDER_ID,
-    available: () => true,
-    ready: () => true,
-    async search(request, signal) {
-      const { settings } = readSettings()
-      const query = String(request?.query ?? '').trim()
-      if (query === '') throw new Error('web-search-pro: request.query 为空，无法搜索。')
-      const value = await runSearch(
-        query,
-        {
-          maxResults: toInteger(request?.maxResults, settings.maxResults),
-          ...(typeof request?.language === 'string' && request.language.trim() !== ''
-            ? { language: request.language.trim() }
-            : {}),
-        },
-        settings,
-        signal,
-      )
-      return {
-        sources: value.sources,
-        ...(value.answer === undefined ? {} : { content: value.answer }),
-      }
-    },
-  }
-}
-
-/**
- * Read what the `web` service currently selects, without writing anything.
- *
- * @param settingsService - the Host `settings` service, when mounted.
- * @returns the selected provider id, or `undefined` when it is not configured.
- */
-function currentSearchProvider(settingsService) {
-  if (settingsService === undefined || typeof settingsService.describe !== 'function') return undefined
-  try {
-    const row = settingsService.describe({ redactSecrets: true }).find((item) => item.ns === WEB_SETTINGS_NAMESPACE)
-    const value = row?.value?.searchProvider
-    return typeof value === 'string' && value !== '' ? value : undefined
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Point `web.searchProvider` at the free or the official route.
- *
- * A deliberate third choice is never overwritten: if the selection is neither the
- * shipped id nor this plugin's id, the switch reports `foreign` and leaves it
- * alone, because silently rewriting someone's explicit provider pick is worse
- * than doing nothing.
- *
- * @param settingsService - the Host `settings` service.
- * @param official - true for the DeepSeek `deepseek-official` route.
- * @returns `{ state, current, desired }` with `state` one of
- *   `already` · `written` · `foreign` · `no-form` · `unavailable`.
- */
-async function selectSearchProvider(settingsService, official) {
-  const desired = official ? OFFICIAL_PROVIDER_ID : FREE_PROVIDER_ID
-  if (settingsService === undefined || typeof settingsService.mutate !== 'function') {
-    return { state: 'unavailable', current: undefined, desired }
-  }
-  const row = settingsService.describe({ redactSecrets: true }).find((item) => item.ns === WEB_SETTINGS_NAMESPACE)
-  if (row === undefined) return { state: 'no-form', current: undefined, desired }
-  const current = row.value?.searchProvider
-  if (current === desired) return { state: 'already', current, desired }
-  if (current !== undefined && current !== '' && current !== OFFICIAL_PROVIDER_ID && current !== FREE_PROVIDER_ID) {
-    return { state: 'foreign', current, desired }
-  }
-  await settingsService.mutate(
-    WEB_SETTINGS_NAMESPACE,
-    [{ op: 'set', path: ['searchProvider'], value: desired }],
-    row.revision,
-  )
-  return { state: 'written', current, desired }
 }
 
 // ---------------------------------------------------------------------------
@@ -1712,97 +1575,6 @@ export function apply(ctx) {
 
   writeHostStatus({ tools: mounted.tools, error: mounted.error })
 
-  // -------------------------------------------------------------------------
-  // Official/free handoff
-  //
-  // Both services are optional, and either may arrive after this function returns.
-  // The handoff therefore waits until each one has mounted or been reported
-  // missing, then runs once — and again on every settings save.
-  // -------------------------------------------------------------------------
-  const handoff = {
-    web: 'pending', // pending · ready · unavailable
-    settings: 'pending', // pending · ready · unavailable
-    settingsService: undefined,
-    register: undefined,
-    dispose: undefined,
-    mounted: false,
-    last: null,
-  }
-
-  const mountFree = () => {
-    if (handoff.mounted || handoff.register === undefined) return
-    handoff.dispose = handoff.register()
-    handoff.mounted = true
-  }
-
-  const unmountFree = () => {
-    if (!handoff.mounted || handoff.dispose === undefined) return
-    handoff.dispose()
-    handoff.dispose = undefined
-    handoff.mounted = false
-  }
-
-  const syncOfficial = async () => {
-    if (handoff.web === 'pending' || handoff.settings === 'pending') return
-    const official = readSettings().settings.officialSearch
-    // Never point the selection at a provider this composition cannot register.
-    if (!official && handoff.web !== 'ready') {
-      handoff.last = 'free:no-web-service'
-      writeHostStatus({ officialSearch: handoff.last, webSearchProvider: handoff.web })
-      return
-    }
-    try {
-      // Mount before pointing at it, and stop pointing before unmounting: the
-      // selection must never name a provider that is not registered.
-      if (official) {
-        const outcome = await selectSearchProvider(handoff.settingsService, true)
-        unmountFree()
-        handoff.last = `official:${outcome.state}`
-      } else {
-        mountFree()
-        const outcome = await selectSearchProvider(handoff.settingsService, false)
-        handoff.last = `free:${outcome.state}`
-      }
-      writeHostStatus({
-        officialSearch: handoff.last,
-        webSearchProvider: handoff.mounted ? 'registered' : 'none',
-        officialSearchError: null,
-      })
-      logger?.info?.(`web-search-pro: official search handoff ${handoff.last}`)
-    } catch (error) {
-      const message = String(error?.message ?? error)
-      handoff.last = `error:${message}`
-      writeHostStatus({ officialSearch: 'error', officialSearchError: message })
-      logger?.warn?.(`web-search-pro: official/free handoff failed: ${message}`)
-    }
-  }
-
-  ctx.inject(['web'], (scoped) => {
-    const web = scoped.web
-    if (web === undefined || web === null || typeof web.registerSearchProvider !== 'function') {
-      handoff.web = 'unavailable'
-      writeHostStatus({ webSearchProvider: 'unavailable' })
-      logger?.warn?.('web-search-pro: no usable web service; the official/free handoff is inert')
-      return
-    }
-    handoff.register = () => web.registerSearchProvider(freeSearchProvider())
-    handoff.web = 'ready'
-    void syncOfficial()
-  })
-
-  ctx.inject(['settings'], (scoped) => {
-    const settingsService = scoped.settings
-    if (settingsService === undefined || settingsService === null || typeof settingsService.mutate !== 'function') {
-      handoff.settings = 'unavailable'
-      writeHostStatus({ officialSearch: 'unavailable' })
-      logger?.warn?.('web-search-pro: no usable settings service; the official search switch cannot be applied')
-      return
-    }
-    handoff.settingsService = settingsService
-    handoff.settings = 'ready'
-    void syncOfficial()
-  })
-
   // The settings page needs an HTTP route; the tool lane does not. A composition
   // without a web server keeps search working and simply has no Settings section,
   // which is why this is a nested fiber rather than a hard requirement.
@@ -1813,10 +1585,7 @@ export function apply(ctx) {
       logger?.warn?.('web-search-pro: webServer service is missing; the Settings page has no data source')
       return
     }
-    const handler = createApiHandler(logger, {
-      onSaved: () => syncOfficial(),
-      currentProvider: () => currentSearchProvider(handoff.settingsService),
-    })
+    const handler = createApiHandler(logger)
     try {
       scoped.effect(
         () => server.register({ kind: 'prefix', path: API_PREFIX, handler }, 'web-search-pro: api'),
@@ -1874,10 +1643,4 @@ export const __test = {
   BROWSER_UA,
   BLOCK_PAGE_TITLE,
   fetchResultsPage,
-  FREE_PROVIDER_ID,
-  OFFICIAL_PROVIDER_ID,
-  WEB_SETTINGS_NAMESPACE,
-  freeSearchProvider,
-  selectSearchProvider,
-  currentSearchProvider,
 }
