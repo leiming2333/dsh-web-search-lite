@@ -12,6 +12,7 @@
 // Only that one row is rewritten. Every other entry in the patch layer is left
 // byte-for-byte alone, and the file is backed up before the write.
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,9 +26,13 @@ const profile = profileArg >= 0 ? argv[profileArg + 1] : 'desktop';
 /**
  * Index URL jsDelivr serves from this repository's `market/` directory.
  *
- * Derived from the manifest's `repository.url` rather than hard-coded: renaming the
- * GitHub repository is a link-only change, and a literal copy here would silently
- * keep pointing at the old name — which 404s once the rename lands.
+ * Pinned to a commit rather than `@main`: jsDelivr caches a branch reference for
+ * hours and `purge` is rate-limited, so `@main` keeps answering with an older index
+ * long after the push — and an older index can name a version that was withdrawn.
+ * A commit reference has no such cache. Re-run this script after changing the index.
+ *
+ * The owner/repo half comes from the manifest, so renaming the repository is a
+ * link-only change.
  */
 const INDEX_URL = (() => {
   const manifest = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -36,9 +41,13 @@ const INDEX_URL = (() => {
   if (match === null) {
     throw new Error(`package.json 的 repository.url 里读不出 GitHub 仓库：${raw}`);
   }
+  const repoRoot = new URL('..', import.meta.url);
+  const sha = execFileSync('git', ['-C', repoRoot.pathname.replace(/^\/([A-Za-z]:)/, '$1'), 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
   // fastly.jsdelivr.net rather than cdn.jsdelivr.net: the canonical host does not
   // resolve on every network in CN, while the Fastly mirror serves the same content.
-  return `https://fastly.jsdelivr.net/gh/${match[1]}/${match[2]}@main/market/index.json`;
+  return `https://fastly.jsdelivr.net/gh/${match[1]}/${match[2]}@${sha}/market/index.json`;
 })();
 
 const home = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh');
