@@ -40,8 +40,8 @@
         "zh": "网络搜索 Lite"
       },
       "description": {
-        "zh": "同时查询 DuckDuckGo、Bing 网页、百度、360 并合并结果，另带网页正文读取。零依赖、不需要 API Key；愿意配一家（Tavily、Serper、Brave、Exa、Bing API、SearXNG）会更稳。只新增两个工具和自己的设置页，不干预内置 web_search。",
-        "en": "Queries DuckDuckGo, Bing, Baidu and 360 at once and merges the results, plus page fetch. Zero dependencies, no API key needed; an optional key (Tavily, Serper, Brave, Exa, Bing API, SearXNG) makes it steadier. Two new tools and its own Settings section; it does not touch the built-in web_search."
+        "zh": "聚合模式：同时查询 DuckDuckGo / Bing 网页 / 百度 / 360，外加所有填了 Key 的 API 提供方（Tavily、Serper、Brave、Exa、Bing API），合并去重。零依赖，不配 Key 也能直接用。",
+        "en": "Aggregate mode queries DuckDuckGo, Bing, Baidu and 360 together with every API provider that has a key (Tavily, Serper, Brave, Exa, Bing API), then merges and de-duplicates. Zero dependencies; works with no key at all."
       },
       "icon": "icon.svg",
       "author": "leiming2333",
@@ -67,6 +67,15 @@
         ]
       },
       "versions": [
+        {
+          "version": "1.4.0",
+          "publishTimestamp": 1794305468,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/leiming2333/dsh-web-search-lite",
+            "commit": "45293deb56d163e13b738433e0a99e0200994ca4"
+          }
+        },
         {
           "version": "1.3.1",
           "publishTimestamp": 1794234737,
