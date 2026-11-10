@@ -68,12 +68,12 @@
       },
       "versions": [
         {
-          "version": "1.4.0",
-          "publishTimestamp": 1794305468,
+          "version": "1.4.1",
+          "publishTimestamp": 1794332977,
           "source": {
             "type": "git",
             "url": "https://github.com/leiming2333/dsh-web-search-lite",
-            "commit": "45293deb56d163e13b738433e0a99e0200994ca4"
+            "commit": "55df8cbbd146c520bfb34ca7b96fc5e20c9c01ab"
           }
         },
         {
