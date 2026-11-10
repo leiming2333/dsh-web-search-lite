@@ -91,8 +91,16 @@ const MAX_BODY_BYTES = 64 * 1024
  * rejected request.
  */
 const PROVIDERS = {
+  aggregate: {
+    label: '聚合模式',
+    mode: 'fanout',
+    endpoint: '',
+    needsKey: false,
+    limit: 50,
+    docs: '',
+  },
   all: {
-    label: '全部引擎',
+    label: '免密钥聚合',
     mode: 'fanout',
     endpoint: '',
     needsKey: false,
@@ -184,12 +192,18 @@ const PROVIDERS = {
 /** Provider ids in a stable order, used by messages and the Settings page. */
 const PROVIDER_IDS = Object.keys(PROVIDERS)
 
+/** Providers that require a key, in declaration order. */
+const KEYED_PROVIDER_IDS = PROVIDER_IDS.filter((id) => PROVIDERS[id].needsKey)
+
 /** Defaults for every stored setting. */
 const DEFAULTS = {
-  // Querying every no-key engine at once is the default: it needs no setup, and the
-  // merged ranking is noticeably better than any single one of them.
-  provider: 'all',
-  apiKey: '',
+  // Aggregate is the default: every no-key engine plus every keyed provider that has
+  // a key configured. It needs no setup when no key is set, and it stops being a
+  // single-engine choice as soon as one is.
+  provider: 'aggregate',
+  // Per-provider keys. One slot per keyed provider, so `aggregate` can call several
+  // of them at once — a single shared `apiKey` made that impossible.
+  apiKeys: {},
   endpoint: '',
   maxResults: 8,
   timeoutMs: 20000,
@@ -281,7 +295,7 @@ function normalizeSettings(raw) {
   const provider = String(source.provider ?? DEFAULTS.provider).trim().toLowerCase()
   return {
     provider: PROVIDER_IDS.includes(provider) ? provider : DEFAULTS.provider,
-    apiKey: String(source.apiKey ?? DEFAULTS.apiKey).trim(),
+    apiKeys: normalizeApiKeys(source),
     endpoint: String(source.endpoint ?? DEFAULTS.endpoint).trim(),
     maxResults: clamp(toInteger(source.maxResults, DEFAULTS.maxResults), 1, 50),
     timeoutMs: clamp(toInteger(source.timeoutMs, DEFAULTS.timeoutMs), 1000, 120000),
@@ -290,6 +304,35 @@ function normalizeSettings(raw) {
     enableFetch: source.enableFetch === undefined ? DEFAULTS.enableFetch : source.enableFetch === true,
     fetchMaxChars: clamp(toInteger(source.fetchMaxChars, DEFAULTS.fetchMaxChars), 1000, FETCH_BODY_LIMIT),
   }
+}
+
+/**
+ * Keep one key per keyed provider, and nothing else.
+ *
+ * Unknown ids are dropped rather than stored: this object is written to disk and
+ * later read back into requests, so an arbitrary property name would be dead weight
+ * at best. A file written before keys were per-provider still carries a single
+ * `apiKey`; that key belonged to whichever provider the same file selected, so it is
+ * migrated into that slot instead of being discarded.
+ *
+ * @param source - the raw settings object.
+ * @returns provider id → key, with empty keys omitted.
+ */
+function normalizeApiKeys(source) {
+  const raw = source.apiKeys !== null && typeof source.apiKeys === 'object' && !Array.isArray(source.apiKeys)
+    ? source.apiKeys
+    : {}
+  const keys = {}
+  for (const id of KEYED_PROVIDER_IDS) {
+    const value = String(raw[id] ?? '').trim()
+    if (value !== '') keys[id] = value
+  }
+  if (Object.keys(keys).length === 0) {
+    const legacy = String(source.apiKey ?? '').trim()
+    const owner = String(source.provider ?? '').trim().toLowerCase()
+    if (legacy !== '' && KEYED_PROVIDER_IDS.includes(owner)) keys[owner] = legacy
+  }
+  return keys
 }
 
 /**
@@ -786,7 +829,7 @@ async function searchBaidu(provider, cfg, query, count, signal) {
 async function searchTavily(provider, cfg, query, count, signal) {
   const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` },
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${providerKey(cfg, 'tavily')}` },
     body: JSON.stringify({
       query,
       max_results: Math.min(count, provider.limit),
@@ -814,7 +857,7 @@ async function searchSerper(provider, cfg, query, count, signal) {
   if (cfg.language !== '') body.hl = cfg.language
   const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': cfg.apiKey },
+    headers: { 'content-type': 'application/json', 'x-api-key': providerKey(cfg, 'serper') },
     body: JSON.stringify(body),
     signal,
   })
@@ -841,7 +884,7 @@ async function searchBrave(provider, cfg, query, count, signal) {
   if (cfg.language !== '') url.searchParams.set('search_lang', cfg.language)
   const payload = await requestJson(provider, url.toString(), {
     method: 'GET',
-    headers: { 'x-subscription-token': cfg.apiKey },
+    headers: { 'x-subscription-token': providerKey(cfg, 'brave') },
     signal,
   })
   return {
@@ -860,7 +903,7 @@ async function searchBrave(provider, cfg, query, count, signal) {
 async function searchExa(provider, cfg, query, count, signal) {
   const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': cfg.apiKey },
+    headers: { 'content-type': 'application/json', 'x-api-key': providerKey(cfg, 'exa') },
     body: JSON.stringify({
       query,
       numResults: Math.min(count, provider.limit),
@@ -888,7 +931,7 @@ async function searchBing(provider, cfg, query, count, signal) {
   if (cfg.language !== '') url.searchParams.set('mkt', cfg.language)
   const payload = await requestJson(provider, url.toString(), {
     method: 'GET',
-    headers: { 'ocp-apim-subscription-key': cfg.apiKey },
+    headers: { 'ocp-apim-subscription-key': providerKey(cfg, 'bing') },
     signal,
   })
   return {
@@ -941,6 +984,7 @@ async function searchSearxng(provider, cfg, query, count, signal) {
 
 /** Adapter table: id → search implementation. */
 const SEARCHERS = {
+  aggregate: searchAll,
   all: searchAll,
   duckduckgo: searchDuckDuckGo,
   bingweb: searchBingWeb,
@@ -1016,11 +1060,46 @@ function interleave(lists, limit) {
   return out
 }
 
-/** Engines a fan-out may use: every no-key page reader, plus SearXNG when configured. */
-function fanoutEngines(cfg) {
+/**
+ * Engines a fan-out may use.
+ *
+ * `all` stays the no-key set: every page reader, plus SearXNG when configured.
+ * `aggregate` adds every keyed provider that actually has a key, which is the whole
+ * point of the mode — one query, both lanes, nothing configured twice. A keyed
+ * provider without a key is skipped rather than attempted: calling it would only
+ * produce a 401 and make the merged result look broken.
+ *
+ * @param cfg - settings snapshot.
+ * @param provider - `aggregate` or `all`.
+ * @returns provider ids to query, in a stable order.
+ */
+function fanoutEngines(cfg, provider = 'all') {
   const ids = ['duckduckgo', 'bingweb', 'baidu', 'so360']
   if (cfg.endpoint !== '') ids.push('searxng')
+  if (provider === 'aggregate') {
+    for (const id of KEYED_PROVIDER_IDS) {
+      if (providerKey(cfg, id) !== '') ids.push(id)
+    }
+  }
   return ids
+}
+
+/**
+ * The key configured for one provider.
+ *
+ * Keys are stored per provider (`apiKeys`); a bare `apiKey` from an older settings
+ * file is still honoured for that file's selected provider, so upgrading does not
+ * silently drop someone's credential.
+ *
+ * @param cfg - settings snapshot.
+ * @param id - provider id.
+ * @returns the key, or an empty string.
+ */
+function providerKey(cfg, id) {
+  const stored = cfg.apiKeys?.[id]
+  if (typeof stored === 'string' && stored !== '') return stored
+  if (cfg.provider === id && typeof cfg.apiKey === 'string' && cfg.apiKey !== '') return cfg.apiKey
+  return ''
 }
 
 /**
@@ -1041,7 +1120,7 @@ function fanoutEngines(cfg) {
  * @returns `{ sources, engines }`.
  */
 async function searchAll(provider, cfg, query, count, signal) {
-  const ids = fanoutEngines(cfg)
+  const ids = fanoutEngines(cfg, provider)
   // Ask for more per engine than the caller needs, so the overlap removed by
   // de-duplication does not eat the whole budget.
   const perEngine = Math.max(count, 6)
@@ -1101,7 +1180,7 @@ async function runSearch(query, options, cfg, signal) {
         + '请在「设置 → 网络搜索」里选择，或在调用时用 provider 参数指定。',
     )
   }
-  if (provider.needsKey && cfg.apiKey === '') {
+  if (provider.needsKey && providerKey(cfg, providerId) === '') {
     throw new Error(
       `还没有配置 ${provider.label} 的 API Key，因此无法搜索。`
         + '请让用户在「设置 → 网络搜索」里填入密钥并保存；也可以先用 provider 参数切到一个免密钥引擎（duckduckgo、bingweb、baidu、so360）。',
@@ -1293,15 +1372,19 @@ function maskKey(key) {
 /**
  * The settings view the browser is allowed to see.
  *
- * The key itself never crosses the wire: the page learns whether one is configured
- * and a masked preview, which is enough to show state and to decide whether an
- * empty field means "keep" or "missing".
+ * The keys themselves never cross the wire: the page learns, per provider, whether
+ * one is configured and a masked preview — enough to show state and to decide
+ * whether an empty field means "keep" or "missing".
  */
 function publicSettings(settings, problem) {
+  const apiKeys = {}
+  for (const id of KEYED_PROVIDER_IDS) {
+    const key = providerKey(settings, id)
+    apiKeys[id] = { has: key !== '', preview: maskKey(key) }
+  }
   return {
     provider: settings.provider,
-    hasApiKey: settings.apiKey !== '',
-    apiKeyPreview: maskKey(settings.apiKey),
+    apiKeys,
     endpoint: settings.endpoint,
     maxResults: settings.maxResults,
     timeoutMs: settings.timeoutMs,
@@ -1368,9 +1451,11 @@ function readJsonBody(request) {
 /**
  * Apply a partial settings patch coming from the Settings page.
  *
- * `apiKey` has three meanings, which is why it is not a plain assignment: absent or
- * `null` keeps the stored key (the page never receives it), `""` clears it, and any
- * other string replaces it.
+ * `apiKeys` is merged slot by slot, which is why it is not a plain assignment: the
+ * page sends only the provider whose field was edited (it never receives the keys),
+ * an absent or `null` slot keeps what is stored, `""` clears that one slot, and any
+ * other string replaces it. Clearing one provider must not touch the others, or
+ * `aggregate` would silently lose engines.
  *
  * @param current - the settings currently on disk.
  * @param patch - the request body.
@@ -1387,7 +1472,17 @@ function mergeSettings(current, patch) {
   for (const field of ['includeAnswer', 'enableFetch']) {
     if (patch[field] !== undefined) next[field] = patch[field]
   }
-  if (patch.apiKey !== undefined && patch.apiKey !== null) next.apiKey = patch.apiKey
+  if (patch.apiKeys !== undefined && patch.apiKeys !== null && typeof patch.apiKeys === 'object' && !Array.isArray(patch.apiKeys)) {
+    // Slot-wise merge: the page sends only the provider whose field was edited, and
+    // an empty string there means "clear this one", not "clear all of them".
+    next.apiKeys = { ...(current.apiKeys ?? {}) }
+    for (const id of KEYED_PROVIDER_IDS) {
+      if (patch.apiKeys[id] === undefined || patch.apiKeys[id] === null) continue
+      const value = String(patch.apiKeys[id]).trim()
+      if (value === '') delete next.apiKeys[id]
+      else next.apiKeys[id] = value
+    }
+  }
   return normalizeSettings(next)
 }
 
@@ -1601,7 +1696,7 @@ export function apply(ctx) {
 
   const { settings, problem } = readSettings()
   logger?.info?.(
-    `web-search-pro: tools mounted (provider=${settings.provider}, key=${settings.apiKey === '' ? 'missing' : 'set'}, fetch=${String(settings.enableFetch)})`,
+    `web-search-pro: tools mounted (provider=${settings.provider}, keys=${String(Object.keys(settings.apiKeys ?? {}).length)}, fetch=${String(settings.enableFetch)})`,
   )
   if (problem !== undefined) logger?.warn?.(`web-search-pro: ${problem}`)
 }
@@ -1610,8 +1705,11 @@ export function apply(ctx) {
 export const __test = {
   PROVIDERS,
   PROVIDER_IDS,
+  KEYED_PROVIDER_IDS,
   DEFAULTS,
   normalizeSettings,
+  normalizeApiKeys,
+  providerKey,
   mergeSettings,
   maskKey,
   publicSettings,

@@ -185,8 +185,7 @@ function textOf(tree) {
 
 const View = {
   provider: 'brave',
-  hasApiKey: true,
-  apiKeyPreview: 'abcd…wxyz',
+  apiKeys: { brave: { has: true, preview: 'abcd…wxyz' } },
   endpoint: '',
   maxResults: 8,
   timeoutMs: 20000,
@@ -205,7 +204,7 @@ function renderWith(preset) {
 }
 
 /** The nine useState slots in source order. */
-function pageState({ status = 'ready', view = View, draft, saved, busy = false, notice = null, probe = null, testing = false, revealed = false, keyTouched = false }) {
+function pageState({ status = 'ready', view = View, draft, saved, busy = false, notice = null, probe = null, testing = false, revealed = false, keyTouched = new Set() }) {
   const { pick } = exports.__test;
   return [status === 'ready' ? { status, view } : status, draft ?? pick(view), saved ?? pick(view), busy, notice, probe, testing, revealed, keyTouched];
 }
@@ -293,7 +292,7 @@ await check('the ready page marks the configured key and offers to clear it', ()
 });
 
 await check('a missing key switches the badge and hides the clear button', () => {
-  const view = { ...View, hasApiKey: false, apiKeyPreview: '' };
+  const view = { ...View, apiKeys: {} };
   const tree = renderWith(pageState({ view }));
   assert.match(textOf(tree), /尚未配置密钥/);
   const buttons = walk(tree).filter((node) => node.type === 'button');
@@ -311,17 +310,15 @@ await check('a pristine form disables save and hides discard', () => {
 
 await check('a no-key engine disables the key field and explains why', () => {
   const { pick } = exports.__test;
-  const view = { ...View, provider: 'duckduckgo', hasApiKey: false, apiKeyPreview: '' };
+  const view = { ...View, provider: 'duckduckgo', apiKeys: {} };
   const tree = renderWith(pageState({ view, draft: pick(view), saved: pick(view) }));
   const text = textOf(tree);
   assert.match(text, /这个引擎不需要密钥/);
   assert.match(text, /结果来自该引擎的公开网页/);
   const keyInput = walk(tree).find((node) => node.type === 'input' && node.props.type === 'password');
-  assert.ok(keyInput !== undefined, 'no key input');
-  assert.equal(keyInput.props.disabled, true, 'the key field stayed editable for a no-key engine');
+  assert.equal(keyInput, undefined, 'a no-key engine must not render a key field at all');
   const buttons = walk(tree).filter((node) => node.type === 'button');
-  const reveal = buttons.find((node) => textOf(node) === '显示');
-  assert.equal(reveal.props.disabled, true, 'the reveal button stayed enabled');
+  assert.ok(!buttons.some((node) => textOf(node) === '显示'), 'reveal was offered with no key field');
   assert.ok(!buttons.some((node) => textOf(node).includes('清除密钥')), 'clear was offered with no key');
 });
 
@@ -393,9 +390,9 @@ await check('wholeNumber enforces its range and rejects junk', () => {
   assert.equal(wholeNumber('abc', 1, 50), undefined);
 });
 
-await check('pick always leaves the key field empty', () => {
-  const draft = pick({ ...View, apiKey: 'must-not-appear' });
-  assert.equal(draft.apiKey, '');
+await check('pick always leaves every key slot empty', () => {
+  const draft = pick({ ...View, apiKeys: { brave: { has: true, preview: 'x' } }, apiKey: 'must-not-appear' });
+  assert.deepEqual(draft.apiKeys, {}, 'a draft never carries a key from the Host');
   assert.equal(draft.provider, 'brave');
   assert.equal(draft.maxResults, '8', 'numbers are strings while editing');
 });

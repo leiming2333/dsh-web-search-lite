@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web search",
-    "description": "Key-free web search (DuckDuckGo, Bing, Baidu, 360) plus page reading, with a switch that serves the built-in web_search tool from these free engines instead of the per-call billed DeepSeek search."
+    "description": "Key-free web search (DuckDuckGo, Bing, Baidu, 360) plus page reading. Add an optional API provider (Tavily, Serper, Brave, Exa, Bing API) and aggregate mode queries it together with the free engines."
   }
 }

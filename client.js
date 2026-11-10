@@ -46,6 +46,8 @@ window.__ModuleLoader__.load({
 			providerHint:
 				'Each API provider has its own key and quota. The no-key engines are read from their public results page: nothing to sign up for, but a redesign or bot check can break them for a while. Pick a single engine only if one keeps failing.',
 			noKeyNeeded: 'This engine needs no key.',
+			aggregateHint:
+				'Aggregate queries every no-key engine above, plus each API provider below that has a key. Providers without a key are skipped instead of failing.',
 			fanoutHint:
 				'Queries DuckDuckGo, Bing 网页, 百度 and 360 at the same time, then merges and de-duplicates what they return. Slower than one engine (about the slowest of them), and steadier: one engine failing only costs its share of the results.',
 			scrapeHint:
@@ -119,6 +121,8 @@ window.__ModuleLoader__.load({
 			providerHint:
 				'带 API Key 的提供方各有独立密钥与额度。免密钥引擎直接读它的公开结果页：不用注册，但页面改版或反爬时可能暂时失效。单个引擎老失败时再单独选它排查。',
 			noKeyNeeded: '这个引擎不需要密钥。',
+			aggregateHint:
+				'聚合模式会同时调用上面所有免密钥引擎，以及下面这些填了 Key 的提供方。没填 Key 的会被跳过，不会拖累其他引擎。',
 			fanoutHint:
 				'同时查询 DuckDuckGo、Bing 网页、百度和 360，再把结果合并去重。比只用一个引擎慢一点（取决于最慢的那个），但更稳：某个引擎失败只损失它那一份。',
 			scrapeHint: '结果来自该引擎的公开网页。如果它开始拒绝自动访问，换个引擎或配置 API Key。',
@@ -222,13 +226,14 @@ window.__ModuleLoader__.load({
 		 * Read the editable fields out of a Host settings view as strings, so an
 		 * emptied number input keeps its empty state while the user is typing.
 		 *
-		 * `apiKey` is always empty here: the Host never sends the key, only whether
-		 * one exists. An empty draft therefore means "leave it alone".
+		 * `apiKeys` starts empty for every provider: the Host never sends a key back,
+		 * only whether one exists. An empty draft therefore means "leave it alone",
+		 * and `keyTouched` records which slots the user actually edited.
 		 */
 		function pick(value) {
 			return {
-				provider: String(value?.provider ?? 'tavily'),
-				apiKey: '',
+				provider: String(value?.provider ?? 'aggregate'),
+				apiKeys: {},
 				endpoint: String(value?.endpoint ?? ''),
 				maxResults: String(value?.maxResults ?? 8),
 				timeoutMs: String(value?.timeoutMs ?? 20000),
@@ -255,7 +260,7 @@ window.__ModuleLoader__.load({
 		 * submitted shape. Otherwise `"8"` would look different from `8` and every
 		 * untouched number field would look changed.
 		 */
-		function submitted(draft) {
+		function submitted(draft, touched = []) {
 			const shape = {
 				provider: draft.provider,
 				endpoint: draft.endpoint.trim(),
@@ -266,6 +271,13 @@ window.__ModuleLoader__.load({
 				enableFetch: draft.enableFetch,
 				fetchMaxChars: wholeNumber(draft.fetchMaxChars, 1000, 200000),
 			};
+			// Only the slots the user edited are sent: an untouched field carries no
+			// key on this side, and sending an empty string would clear the stored one.
+			const keys = {};
+			for (const id of touched) {
+				if (draft.apiKeys[id] !== undefined) keys[id] = draft.apiKeys[id].trim();
+			}
+			if (Object.keys(keys).length > 0) shape.apiKeys = keys;
 			return Object.values(shape).includes(undefined) ? undefined : shape;
 		}
 
@@ -507,7 +519,7 @@ window.__ModuleLoader__.load({
 			const [probe, setProbe] = useState(null);
 			const [testing, setTesting] = useState(false);
 			const [revealed, setRevealed] = useState(false);
-			const [keyTouched, setKeyTouched] = useState(false);
+			const [keyTouched, setKeyTouched] = useState(new Set());
 
 			useEffect(() => {
 				alive.current = true;
@@ -525,7 +537,7 @@ window.__ModuleLoader__.load({
 					setState({ status: 'ready', view });
 					setDraft(pick(view));
 					setSaved(pick(view));
-					setKeyTouched(false);
+					setKeyTouched(new Set());
 					setNotice(view.problem === undefined ? null : { tone: 'warn', text: t('problem') });
 				} catch (error) {
 					if (!alive.current) return;
@@ -589,16 +601,33 @@ window.__ModuleLoader__.load({
 
 			const view = state.view ?? {};
 			const provider = providerOf(draft.provider);
-			const pending = submitted(draft);
+			// Which key fields to show: the selected API provider alone, every keyed
+			// provider under aggregate (that is what the mode calls), none otherwise.
+			const keyTargets =
+				provider.id === 'aggregate'
+					? PROVIDERS.filter((item) => item.needsKey)
+					: provider.needsKey
+						? [provider]
+						: [];
+			const pending = submitted(draft, [...keyTouched]);
 			const baseline = submitted(saved);
+			// Key edits are tracked apart from the rest: a slot holds no key on this
+			// side, so comparing shapes would either miss an edit or report a phantom.
+			const withoutKeys = ({ apiKeys, ...rest }) => rest;
 			const dirty = pending === undefined || baseline === undefined
 				? true
-				: changesBetween(pending, baseline).length > 0 || keyTouched;
+				: keyTouched.size > 0 || changesBetween(withoutKeys(pending), withoutKeys(baseline)).length > 0;
 
 			const edit = (field, next) => {
 				setDraft((current) => ({ ...current, [field]: next }));
 				setNotice(null);
-				if (field === 'apiKey') setKeyTouched(true);
+			};
+
+			/** Edit one provider's key slot and remember that this slot was touched. */
+			const editKey = (id, value) => {
+				setDraft((current) => ({ ...current, apiKeys: { ...current.apiKeys, [id]: value } }));
+				setKeyTouched((current) => new Set(current).add(id));
+				setNotice(null);
 			};
 
 			const save = async () => {
@@ -613,8 +642,8 @@ window.__ModuleLoader__.load({
 					setNotice({ tone: 'error', text: message });
 					return;
 				}
-				const body = { ...pending };
-				if (keyTouched) body.apiKey = draft.apiKey.trim();
+				const body = { ...withoutKeys(pending) };
+				if (pending.apiKeys !== undefined) body.apiKeys = pending.apiKeys;
 				setBusy(true);
 				setNotice(null);
 				try {
@@ -691,76 +720,78 @@ window.__ModuleLoader__.load({
 							],
 						),
 					),
-					h(
-						Field,
-						{
-							label: t('apiKey'),
-							hint: provider.needsKey ? t('apiKeyHint') : t('apiKeyUnused'),
-							trailing:
-								provider.docs === ''
-									? null
-									: h(
-											'a',
-											{ style: styles.link, href: provider.docs, target: '_blank', rel: 'noopener noreferrer' },
-											provider.needsKey ? t('apiKeyDocs') : t('engineHome'),
-										),
-						},
-						h(
-							'div',
-							{ style: styles.row },
-							h('input', {
-								type: revealed ? 'text' : 'password',
-								value: draft.apiKey,
-								placeholder: !provider.needsKey
-									? t('noKeyNeeded')
-									: view.hasApiKey
-										? t('apiKeyPlaceholder')
-										: '',
-								disabled: busy || !provider.needsKey,
-								autoComplete: 'off',
-								spellCheck: false,
-								onChange: (event) => edit('apiKey', event.target.value),
-								style: { ...styles.input, flex: '1 1 auto', minWidth: 0 },
-							}),
+					...keyTargets.map((target) => {
+						const slot = view.apiKeys?.[target.id] ?? { has: false, preview: '' };
+						const edited = keyTouched.has(target.id);
+						const typed = (draft.apiKeys[target.id] ?? '').trim();
+						// What the badge should say: an edited slot reflects the input, an
+						// untouched one reflects what the Host reported.
+						const has = edited ? typed !== '' : slot.has;
+						return h(
+							Field,
+							{
+								key: target.id,
+								label: keyTargets.length > 1 ? target.label : t('apiKey'),
+								hint: t('apiKeyHint'),
+								trailing:
+									target.docs === ''
+										? null
+										: h(
+												'a',
+												{ style: styles.link, href: target.docs, target: '_blank', rel: 'noopener noreferrer' },
+												t('apiKeyDocs'),
+											),
+							},
 							h(
-								'button',
-								{
-									type: 'button',
-									disabled: !provider.needsKey,
-									onClick: () => setRevealed((current) => !current),
-									style: { ...styles.button, opacity: provider.needsKey ? 1 : 0.55 },
-								},
-								revealed ? t('apiKeyHide') : t('apiKeyShow'),
-							),
-							view.hasApiKey && provider.needsKey
-								? h(
-										'button',
-										{
-											type: 'button',
-											disabled: busy,
-											onClick: () => {
-												edit('apiKey', '');
-												setKeyTouched(true);
+								'div',
+								{ style: styles.row },
+								h('input', {
+									type: revealed ? 'text' : 'password',
+									value: draft.apiKeys[target.id] ?? '',
+									placeholder: slot.has && !edited ? t('apiKeyPlaceholder') : '',
+									disabled: busy,
+									autoComplete: 'off',
+									spellCheck: false,
+									onChange: (event) => editKey(target.id, event.target.value),
+									style: { ...styles.input, flex: '1 1 auto', minWidth: 0 },
+								}),
+								h(
+									'button',
+									{
+										type: 'button',
+										onClick: () => setRevealed((current) => !current),
+										style: styles.button,
+									},
+									revealed ? t('apiKeyHide') : t('apiKeyShow'),
+								),
+								has
+									? h(
+											'button',
+											{
+												type: 'button',
+												disabled: busy,
+												onClick: () => editKey(target.id, ''),
+												style: styles.button,
 											},
-											style: styles.button,
-										},
-										t('apiKeyClear'),
-									)
-								: null,
-						),
-						h(
-							'p',
-							{ style: styles.badge },
-							provider.needsKey
-								? view.hasApiKey
-									? `${t('apiKeySet')}${view.apiKeyPreview ?? ''}`
-									: t('apiKeyUnset')
-								: t('noKeyNeeded'),
-						),
-						provider.needsKey
-							? null
-							: h('p', { style: styles.hint }, provider.mode === 'fanout' ? t('fanoutHint') : t('scrapeHint')),
-					),
+											t('apiKeyClear'),
+										)
+									: null,
+							),
+							h(
+								'p',
+								{ style: styles.badge },
+								has ? `${t('apiKeySet')}${edited ? typed : slot.preview}` : t('apiKeyUnset'),
+							),
+						);
+					}),
+					keyTargets.length === 0
+						? h('p', { style: styles.hint }, t('noKeyNeeded'))
+						: null,
+					keyTargets.length === 0
+						? h('p', { style: styles.hint }, provider.mode === 'fanout' ? t('fanoutHint') : t('scrapeHint'))
+						: provider.id === 'aggregate'
+							? h('p', { style: styles.hint }, t('aggregateHint'))
+							: null,
 					h(
 						Field,
 						{ label: t('endpoint'), hint: t('endpointHint') },

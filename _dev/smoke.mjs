@@ -20,6 +20,7 @@ const {
   PROVIDERS,
   PROVIDER_IDS,
   normalizeSettings,
+  providerKey,
   mergeSettings,
   maskKey,
   publicSettings,
@@ -202,23 +203,23 @@ await check('normalizeSettings clamps every out-of-range field', () => {
     fetchMaxChars: 10_000_000,
     includeAnswer: 'yes',
     enableFetch: 1,
-    apiKey: '  key  ',
+    apiKeys: { tavily: '  key  ', bogus: 'dropped' },
   });
-  assert.equal(settings.provider, 'all', 'unknown provider must fall back to the fan-out');
+  assert.equal(settings.provider, 'aggregate', 'unknown provider must fall back to the default fan-out');
   assert.equal(settings.maxResults, 50);
   assert.equal(settings.timeoutMs, 1000);
   assert.equal(settings.fetchMaxChars, 200000);
   assert.equal(settings.includeAnswer, false, 'a non-true value must not enable a switch');
   assert.equal(settings.enableFetch, false);
-  assert.equal(settings.apiKey, 'key');
+  assert.deepEqual(settings.apiKeys, { tavily: 'key' }, 'values are trimmed and unknown ids dropped');
 });
 
 await check('settings round-trip through the state file', () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKey: 'secret-key-value', maxResults: 12 });
+  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKeys: { brave: 'secret-key-value' }, maxResults: 12 });
   const { settings, problem } = readSettings();
   assert.equal(problem, undefined);
   assert.equal(settings.provider, 'brave');
-  assert.equal(settings.apiKey, 'secret-key-value');
+  assert.deepEqual(settings.apiKeys, { brave: 'secret-key-value' });
   assert.equal(settings.maxResults, 12);
   assert.ok(fs.existsSync(settingsPath()));
   assert.ok(settingsPath().startsWith(home), 'state must live under DSH_HOME');
@@ -227,25 +228,67 @@ await check('settings round-trip through the state file', () => {
 await check('a broken settings file degrades to defaults with a reported problem', () => {
   fs.writeFileSync(settingsPath(), '{ not json');
   const { settings, problem } = readSettings();
-  assert.equal(settings.provider, 'all');
+  assert.equal(settings.provider, 'aggregate');
   assert.match(problem, /不是合法 JSON/);
   writeSettings(normalizeSettings({}));
 });
 
-await check('mergeSettings treats a null key as "keep" and "" as clear', () => {
-  const base = normalizeSettings({ provider: 'exa', apiKey: 'stored' });
-  assert.equal(mergeSettings(base, { provider: 'brave' }).apiKey, 'stored');
-  assert.equal(mergeSettings(base, { apiKey: null }).apiKey, 'stored');
-  assert.equal(mergeSettings(base, { apiKey: 'fresh' }).apiKey, 'fresh');
-  assert.equal(mergeSettings(base, { apiKey: '' }).apiKey, '');
+await check('mergeSettings merges keys slot by slot', () => {
+  const base = normalizeSettings({ apiKeys: { exa: 'stored', brave: 'other' } });
+  assert.deepEqual(mergeSettings(base, { provider: 'brave' }).apiKeys, { exa: 'stored', brave: 'other' });
+  assert.deepEqual(mergeSettings(base, { apiKeys: { exa: null } }).apiKeys, { exa: 'stored', brave: 'other' }, 'null keeps');
+  assert.deepEqual(mergeSettings(base, { apiKeys: { exa: 'fresh' } }).apiKeys, { exa: 'fresh', brave: 'other' }, 'replace one');
+  assert.deepEqual(
+    mergeSettings(base, { apiKeys: { exa: '' } }).apiKeys,
+    { brave: 'other' },
+    'clearing one slot must not clear the others, or aggregate silently loses engines',
+  );
 });
 
-await check('the public view never carries the key', () => {
-  const view = publicSettings(normalizeSettings({ apiKey: 'tvly-1234567890abcd' }));
+await check('the public view never carries a key', () => {
+  const view = publicSettings(normalizeSettings({ apiKeys: { tavily: 'tvly-1234567890abcd' } }));
   assert.equal(view.apiKey, undefined, 'the key leaked into the view');
-  assert.equal(view.hasApiKey, true);
-  assert.equal(view.apiKeyPreview, 'tvly…abcd');
+  assert.deepEqual(view.apiKeys.tavily, { has: true, preview: 'tvly…abcd' });
+  assert.deepEqual(view.apiKeys.serper, { has: false, preview: '' }, 'unconfigured providers report empty');
   assert.equal(JSON.stringify(view).includes('1234567890'), false);
+});
+
+await check('aggregate fans out to every engine that can actually answer', () => {
+  const bare = normalizeSettings({});
+  assert.equal(bare.provider, 'aggregate', 'aggregate is the default');
+  assert.deepEqual(
+    fanoutEngines(bare, 'aggregate'),
+    ['duckduckgo', 'bingweb', 'baidu', 'so360'],
+    'no keys configured: same engines as the no-key fan-out',
+  );
+  assert.deepEqual(
+    fanoutEngines(bare, 'all'),
+    ['duckduckgo', 'bingweb', 'baidu', 'so360'],
+    'all never adds keyed providers',
+  );
+
+  const keyed = normalizeSettings({ apiKeys: { tavily: 'k1', exa: 'k2' }, endpoint: 'https://searx.example.com' });
+  assert.deepEqual(
+    fanoutEngines(keyed, 'aggregate'),
+    ['duckduckgo', 'bingweb', 'baidu', 'so360', 'searxng', 'tavily', 'exa'],
+    'keyed providers with a key join; the ones without are skipped',
+  );
+  assert.deepEqual(
+    fanoutEngines(keyed, 'all'),
+    ['duckduckgo', 'bingweb', 'baidu', 'so360', 'searxng'],
+    'all stays no-key even when keys exist',
+  );
+});
+
+await check('a shared apiKey from an older file migrates to its provider slot', () => {
+  const legacy = normalizeSettings({ provider: 'brave', apiKey: 'old-key' });
+  assert.deepEqual(legacy.apiKeys, { brave: 'old-key' });
+  assert.equal(providerKey(legacy, 'brave'), 'old-key');
+  assert.equal(providerKey(legacy, 'tavily'), '', 'the old key belongs to one provider only');
+  // A keyed provider outside its own slot stays unknown to the others.
+  const perProvider = normalizeSettings({ apiKeys: { exa: 'exa-key' } });
+  assert.equal(providerKey(perProvider, 'exa'), 'exa-key');
+  assert.equal(providerKey(perProvider, 'brave'), '');
 });
 
 await check('maskKey keeps only the ends', () => {
@@ -346,7 +389,9 @@ for (const testCase of cases) {
   mockFetch(() => ({ json: testCase.payload }));
   const value = await searchWith({
     provider: testCase.provider,
-    apiKey: 'test-key',
+    // Each keyed provider now owns its own slot; a shared key would leave every
+    // case but the first one keyless.
+    apiKeys: { [testCase.provider]: 'test-key' },
     endpoint: testCase.provider === 'searxng' ? 'https://searx.example.com' : '',
     maxResults: 5,
   });
@@ -367,7 +412,7 @@ await check('tavily sends a bearer token and honours maxResults', async () => {
     json: { results: Array.from({ length: 9 }, (_, i) => ({ url: `https://x/${i}`, title: `t${i}`, content: 'c' })) },
   }));
   calls.length = 0;
-  const value = await searchWith({ provider: 'tavily', apiKey: 'k', maxResults: 5 }, { query: 'q', maxResults: 3 });
+  const value = await searchWith({ provider: 'tavily', apiKeys: { tavily: 'k' }, maxResults: 5 }, { query: 'q', maxResults: 3 });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'https://api.tavily.com/search');
   assert.equal(calls[0].init.headers.authorization, 'Bearer k');
@@ -379,13 +424,13 @@ await check('tavily sends a bearer token and honours maxResults', async () => {
 await check('a per-call provider override wins over the saved one', async () => {
   mockFetch(() => ({ json: { web: { results: [{ url: 'https://b/1', title: 'B' }] } } }));
   calls.length = 0;
-  const value = await searchWith({ provider: 'tavily', apiKey: 'k' }, { query: 'q', provider: 'brave' });
+  const value = await searchWith({ provider: 'tavily', apiKeys: { tavily: 'k', brave: 'k' } }, { query: 'q', provider: 'brave' });
   assert.equal(value.provider, 'brave');
   assert.match(calls[0].url, /api\.search\.brave\.com/);
 });
 
 await check('a missing key fails with a settings instruction', async () => {
-  await assert.rejects(() => searchWith({ provider: 'brave', apiKey: '' }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'brave', apiKeys: {} }), (error) => {
     assert.match(error.message, /设置 → 网络搜索/);
     assert.match(error.message, /Brave/);
     return true;
@@ -393,7 +438,7 @@ await check('a missing key fails with a settings instruction', async () => {
 });
 
 await check('SearXNG works without a key but needs an endpoint', async () => {
-  await assert.rejects(() => searchWith({ provider: 'searxng', apiKey: '', endpoint: '' }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'searxng', apiKeys: {}, endpoint: '' }), (error) => {
     assert.match(error.message, /服务地址/);
     return true;
   });
@@ -414,18 +459,18 @@ await check('an unknown provider lists the supported ids', async () => {
 
 await check('401 points at the key and 429 at the quota', async () => {
   mockFetch(() => ({ status: 401, text: 'unauthorized' }));
-  await assert.rejects(() => searchWith({ provider: 'brave', apiKey: 'wrong' }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'brave', apiKeys: { brave: 'wrong' } }), (error) => {
     assert.match(error.message, /API Key 无效/);
     assert.match(error.message, /unauthorized/);
     return true;
   });
   mockFetch(() => ({ status: 429, text: 'slow down' }));
-  await assert.rejects(() => searchWith({ provider: 'brave', apiKey: 'x' }), /额度/);
+  await assert.rejects(() => searchWith({ provider: 'brave', apiKeys: { brave: 'x' } }), /额度/);
 });
 
 await check('a vendor 5xx surfaces the status and a body excerpt', async () => {
   mockFetch(() => ({ status: 503, text: '<html>maintenance</html>' }));
-  await assert.rejects(() => searchWith({ provider: 'exa', apiKey: 'k' }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'exa', apiKeys: { exa: 'k' } }), (error) => {
     assert.match(error.message, /HTTP 503/);
     assert.match(error.message, /maintenance/);
     return true;
@@ -686,12 +731,12 @@ await check('an unparsable page says so instead of returning zero results', asyn
   });
 });
 
-await check('the default provider queries every no-key engine', () => {
-  assert.equal(normalizeSettings({}).provider, 'all');
-  assert.equal(PROVIDERS.all.mode, 'fanout');
-  assert.equal(PROVIDERS.all.needsKey, false);
-  for (const id of PROVIDERS.all ? fanoutEngines(normalizeSettings({})) : []) {
-    assert.equal(PROVIDERS[id].needsKey, false, id + ' in the default fan-out would demand a key');
+await check('the default provider queries every engine that needs no setup', () => {
+  assert.equal(normalizeSettings({}).provider, 'aggregate');
+  assert.equal(PROVIDERS.aggregate.mode, 'fanout');
+  assert.equal(PROVIDERS.aggregate.needsKey, false);
+  for (const id of fanoutEngines(normalizeSettings({}), 'aggregate')) {
+    assert.equal(PROVIDERS[id].needsKey, false, id + ' would demand a key that is not configured');
   }
 });
 
@@ -737,18 +782,18 @@ async function callApi(request) {
 }
 
 await check('GET /settings returns the masked view', async () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKey: 'abcdefghijkl' });
+  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKeys: { brave: 'abcdefghijkl' } });
   const answer = await callApi(
     fakeRequest({ method: 'GET', url: '/api/web-search-pro/settings', headers: { host: 'x' } }),
   );
   assert.equal(answer.status, 200);
   assert.equal(answer.json.settings.provider, 'brave');
-  assert.equal(answer.json.settings.hasApiKey, true);
+  assert.equal(answer.json.settings.apiKeys.brave.has, true);
   assert.ok(!JSON.stringify(answer.json).includes('abcdefghijkl'), 'the key crossed the wire');
 });
 
 await check('POST /settings persists a patch and keeps an untouched key', async () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKey: 'stored-key' });
+  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKeys: { brave: 'stored-key' } });
   const answer = await callApi(
     fakeRequest({
       method: 'POST',
@@ -760,23 +805,24 @@ await check('POST /settings persists a patch and keeps an untouched key', async 
   assert.equal(answer.status, 200);
   assert.equal(answer.json.settings.provider, 'exa');
   assert.equal(answer.json.settings.maxResults, 4);
-  assert.equal(answer.json.settings.hasApiKey, true, 'the stored key was dropped');
-  assert.equal(readSettings().settings.apiKey, 'stored-key');
+  assert.equal(answer.json.settings.apiKeys.brave.has, true, 'the stored key was dropped');
+  assert.equal(readSettings().settings.apiKeys.brave, 'stored-key');
 });
 
 await check('POST /settings clears the key on an explicit empty string', async () => {
-  writeSettings({ ...normalizeSettings({}), apiKey: 'stored-key' });
+  writeSettings({ ...normalizeSettings({}), apiKeys: { brave: 'stored-key', exa: 'kept' } });
   const answer = await callApi(
     fakeRequest({
       method: 'POST',
       url: '/api/web-search-pro/settings',
       headers: { host: 'x' },
-      body: JSON.stringify({ apiKey: '' }),
+      body: JSON.stringify({ apiKeys: { brave: '' } }),
     }),
   );
   assert.equal(answer.status, 200);
-  assert.equal(answer.json.settings.hasApiKey, false);
-  assert.equal(readSettings().settings.apiKey, '');
+  assert.equal(answer.json.settings.apiKeys.brave.has, false);
+  assert.equal(answer.json.settings.apiKeys.exa.has, true, 'clearing one provider must leave the others');
+  assert.deepEqual(readSettings().settings.apiKeys, { exa: 'kept' });
 });
 
 await check('POST /test reports a real search and a real failure', async () => {

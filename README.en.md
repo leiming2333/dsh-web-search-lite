@@ -91,8 +91,8 @@ Stored in `<DSH_HOME>/web-search-pro/settings.json` (default `~/.dsh/web-search-
 
 | Field | Default | Meaning |
 |---|---|---|
-| `provider` | `all` | Engine to use; `all` queries every no-key engine. |
-| `apiKey` | empty | Key for the API providers. |
+| `provider` | `aggregate` | Engine to use. `aggregate` queries the no-key engines **and** every API provider that has a key; `all` queries only the no-key ones; a single id picks one engine. |
+| `apiKeys` | empty | Per-provider keys, e.g. `{ "tavily": "tvly-…" }`. Only providers with a key are called by `aggregate`. |
 | `endpoint` | empty | Custom base URL; required for SearXNG. |
 | `maxResults` | `8` | Sources per search (1–50). |
 | `timeoutMs` | `20000` | Per-request timeout (1000–120000). |

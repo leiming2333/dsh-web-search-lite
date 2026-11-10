@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-lite",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "type": "module",
   "description": "零依赖的 DSH 联网搜索：DuckDuckGo / Bing / 百度 / 360 聚合去重 + 网页正文读取，免 API Key，可选 Tavily / Serper / Brave / Exa / SearXNG。Zero-dependency web search for DeepSeek Harness, no Playwright, no SQLite.",
   "license": "MIT",
