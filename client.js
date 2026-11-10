@@ -67,6 +67,8 @@ window.__ModuleLoader__.load({
 			endpoint: 'Endpoint',
 			endpointHint:
 				"Optional. Leave empty to use the provider's official URL; required for SearXNG, for example https://searx.example.com",
+			endpointHintAggregate:
+				'Only reaches SearXNG and the page-reading engines. Each API provider below uses its own official URL, so one value here cannot point them all at the wrong host.',
 			results: 'Results per search',
 			resultsHint: 'How many sources one search returns, 1 to 50.',
 			timeout: 'Timeout (ms)',
@@ -139,6 +141,8 @@ window.__ModuleLoader__.load({
 			engineHome: '打开官网',
 			endpoint: '服务地址',
 			endpointHint: '可选。留空使用该提供方的官方地址；SearXNG 必填，例如 https://searx.example.com',
+			endpointHintAggregate:
+				'只作用于 SearXNG 和免密钥引擎。上面各家 API 用各自的官方地址，所以这里填一个值不会把它们的请求串到同一个主机。',
 			results: '每次搜索的结果数',
 			resultsHint: '一次搜索返回多少条来源，1–50。',
 			timeout: '超时（毫秒）',
@@ -188,34 +192,104 @@ window.__ModuleLoader__.load({
 		 * key field is meaningless for them.
 		 */
 		const PROVIDERS = [
-			{ id: 'all', label: '全部引擎', needsKey: false, mode: 'fanout', docs: '' },
-			{ id: 'duckduckgo', label: 'DuckDuckGo', needsKey: false, mode: 'html', docs: 'https://duckduckgo.com/' },
-			{ id: 'bingweb', label: 'Bing 网页', needsKey: false, mode: 'html', docs: 'https://www.bing.com/' },
-			{ id: 'baidu', label: '百度', needsKey: false, mode: 'html', docs: 'https://www.baidu.com/' },
-			{ id: 'so360', label: '360 搜索', needsKey: false, mode: 'html', docs: 'https://www.so.com/' },
+			{
+				id: 'aggregate',
+				label: '聚合模式',
+				needsKey: false,
+				mode: 'fanout',
+				docs: '',
+				endpoints: [],
+			},
+			{
+				id: 'all',
+				label: '免密钥聚合',
+				needsKey: false,
+				mode: 'fanout',
+				docs: '',
+				endpoints: [],
+			},
+			{
+				id: 'duckduckgo',
+				label: 'DuckDuckGo',
+				needsKey: false,
+				mode: 'html',
+				docs: 'https://duckduckgo.com/',
+				endpoints: ['https://html.duckduckgo.com/html/'],
+			},
+			{
+				id: 'bingweb',
+				label: 'Bing 网页',
+				needsKey: false,
+				mode: 'html',
+				docs: 'https://www.bing.com/',
+				endpoints: ['https://www.bing.com/search', 'https://cn.bing.com/search'],
+			},
+			{
+				id: 'baidu',
+				label: '百度',
+				needsKey: false,
+				mode: 'html',
+				docs: 'https://www.baidu.com/',
+				endpoints: ['https://www.baidu.com/s'],
+			},
+			{
+				id: 'so360',
+				label: '360 搜索',
+				needsKey: false,
+				mode: 'html',
+				docs: 'https://www.so.com/',
+				endpoints: ['https://www.so.com/s'],
+			},
 			{
 				id: 'searxng',
 				label: 'SearXNG（自建实例）',
 				needsKey: false,
 				mode: 'json',
 				docs: 'https://docs.searxng.org/dev/search_api.html',
+				// Public instances almost all disable the JSON API that this plugin
+				// needs, so the presets are the local/Docker defaults rather than a
+				// list of instances that would fail.
+				endpoints: ['http://localhost:8888/search', 'http://127.0.0.1:8080/search'],
 			},
-			{ id: 'tavily', label: 'Tavily', needsKey: true, mode: 'api', docs: 'https://app.tavily.com/home' },
-			{ id: 'serper', label: 'Serper (Google)', needsKey: true, mode: 'api', docs: 'https://serper.dev/api-key' },
+			{
+				id: 'tavily',
+				label: 'Tavily',
+				needsKey: true,
+				mode: 'api',
+				docs: 'https://app.tavily.com/home',
+				endpoints: ['https://api.tavily.com/search'],
+			},
+			{
+				id: 'serper',
+				label: 'Serper (Google)',
+				needsKey: true,
+				mode: 'api',
+				docs: 'https://serper.dev/api-key',
+				endpoints: ['https://google.serper.dev/search'],
+			},
 			{
 				id: 'brave',
 				label: 'Brave Search',
 				needsKey: true,
 				mode: 'api',
 				docs: 'https://api.search.brave.com/app/keys',
+				endpoints: ['https://api.search.brave.com/res/v1/web/search'],
 			},
-			{ id: 'exa', label: 'Exa', needsKey: true, mode: 'api', docs: 'https://dashboard.exa.ai/api-keys' },
+			{
+				id: 'exa',
+				label: 'Exa',
+				needsKey: true,
+				mode: 'api',
+				docs: 'https://dashboard.exa.ai/api-keys',
+				endpoints: ['https://api.exa.ai/search'],
+			},
 			{
 				id: 'bing',
 				label: 'Bing Web Search API',
 				needsKey: true,
 				mode: 'api',
 				docs: 'https://portal.azure.com/',
+				endpoints: ['https://api.bing.microsoft.com/v7.0/search'],
 			},
 		];
 
@@ -609,6 +683,13 @@ window.__ModuleLoader__.load({
 					: provider.needsKey
 						? [provider]
 						: [];
+			// Endpoint presets follow the selection. Under aggregate the field only
+			// reaches SearXNG and the page readers (each keyed provider uses its own
+			// official URL), so the presets are SearXNG's.
+			const endpointPresets =
+				provider.id === 'aggregate'
+					? (PROVIDERS.find((item) => item.id === 'searxng')?.endpoints ?? [])
+					: (provider.endpoints ?? []);
 			const pending = submitted(draft, [...keyTouched]);
 			const baseline = submitted(saved);
 			// Key edits are tracked apart from the rest: a slot holds no key on this
@@ -794,15 +875,27 @@ window.__ModuleLoader__.load({
 							: null,
 					h(
 						Field,
-						{ label: t('endpoint'), hint: t('endpointHint') },
+						{
+							label: t('endpoint'),
+							hint: provider.id === 'aggregate' ? t('endpointHintAggregate') : t('endpointHint'),
+						},
 						h('input', {
 							type: 'text',
 							value: draft.endpoint,
 							disabled: busy,
 							spellCheck: false,
+							list: 'wsp-endpoint-presets',
+							autoComplete: 'off',
 							onChange: (event) => edit('endpoint', event.target.value),
 							style: styles.input,
 						}),
+						endpointPresets.length === 0
+							? null
+							: h(
+									'datalist',
+									{ id: 'wsp-endpoint-presets' },
+									endpointPresets.map((url) => h('option', { key: url, value: url })),
+								),
 					),
 					h(
 						Field,

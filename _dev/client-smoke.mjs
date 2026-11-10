@@ -271,14 +271,16 @@ await check('the ready page renders every field', () => {
   const inputs = nodes.filter((node) => node.type === 'input');
   const selects = nodes.filter((node) => node.type === 'select');
   const options = nodes.filter((node) => node.type === 'option');
+  assert.ok(options.length >= 12, 'engine options plus endpoint presets');
   assert.equal(inputs.length, 6, `expected 6 inputs, saw ${inputs.length}`);
   assert.equal(selects.length, 1, 'expected the provider select');
-  assert.equal(options.length, 11, 'expected 11 engines');
+  // `datalist` also renders options, so engines are counted per optgroup below.
   const groups = nodes.filter((node) => node.type === 'optgroup');
   assert.equal(groups.length, 2, 'expected the no-key and keyed groups');
   assert.deepEqual(groups.map((node) => node.props.label), ['免密钥（开箱即用）', '需要 API Key']);
-  assert.equal(groups[0].children.length, 6, 'no-key group holds the fan-out plus the 5 keyless engines');
+  assert.equal(groups[0].children.length, 7, 'no-key group: aggregate, the no-key fan-out, and the 5 keyless engines');
   assert.equal(groups[1].children.length, 5, 'keyed group should hold the 5 API providers');
+  assert.equal(groups[0].children.length + groups[1].children.length, 12, 'every engine appears exactly once');
   const types = inputs.map((node) => node.props.type);
   assert.ok(types.includes('password'), 'the key field should be masked');
   assert.equal(types.filter((type) => type === 'number').length, 3, 'expected three number inputs');
@@ -414,7 +416,7 @@ await check('an out-of-range number makes the whole draft unwritable', () => {
 });
 
 await check('an unknown provider id falls back to a real entry', () => {
-  assert.equal(providerOf('nope').id, 'all', 'unknown ids fall back to the fan-out');
+  assert.equal(providerOf('nope').id, 'aggregate', 'unknown ids fall back to the default mode');
   assert.equal(providerOf('searxng').needsKey, false);
   assert.equal(providerOf('baidu').needsKey, false);
   assert.equal(providerOf('tavily').needsKey, true);

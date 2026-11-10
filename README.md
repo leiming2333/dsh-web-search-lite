@@ -176,7 +176,7 @@ node _dev/install.mjs --uninstall    # 回滚
 |---|---|---|
 | `provider` | `aggregate` | 用哪个引擎。`aggregate`（聚合模式）同时查四家免密钥引擎和所有填了 Key 的 API；`all` 只查免密钥那几家；也可以选单个引擎。 |
 | `apiKeys` | 空 | 按提供方分开存的密钥，如 `{ "tavily": "tvly-…" }`。只有填了 Key 的 API 才会被聚合模式调用。 |
-| `endpoint` | 空 | 自定义地址；留空用官方地址。SearXNG 必填。 |
+| `endpoint` | 空 | 自定义地址，留空用官方地址。设置页给了各家的官方地址作预设，可以直接选，也可以手填（换成中转地址）。聚合模式下它只作用于 SearXNG 和免密钥引擎——各家 API 始终用自己的地址。 |
 | `maxResults` | `8` | 每次结果条数（1–50，另受各家上限约束）。 |
 | `timeoutMs` | `20000` | 单次请求超时（1000–120000）。 |
 | `language` | 空 | 语言提示，如 `zh-CN`。 |

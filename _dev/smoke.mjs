@@ -280,6 +280,39 @@ await check('aggregate fans out to every engine that can actually answer', () =>
   );
 });
 
+await check('a fan-out keeps every API provider on its own endpoint', async () => {
+  // `endpoint` is one field shared by all settings. Under aggregate it must reach
+  // only SearXNG and the page readers: handing it to Tavily would post Tavily's
+  // payload to whatever host the user typed for something else.
+  const seen = [];
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    return {
+      ok: true,
+      status: 200,
+      url: String(url),
+      headers: new Headers({ 'content-type': 'text/html' }),
+      text: async () => '<html><body></body></html>',
+    };
+  };
+  const cfg = normalizeSettings({
+    provider: 'aggregate',
+    endpoint: 'https://mirror.example/',
+    apiKeys: { tavily: 'k' },
+  });
+  try {
+    await searchAll(PROVIDERS.aggregate, cfg, 'q', 3, new AbortController().signal);
+  } catch {
+    // Every engine returns an empty page here; only the request URLs matter.
+  }
+  const tavilyCall = seen.find((url) => url.includes('tavily'));
+  assert.ok(tavilyCall !== undefined, 'tavily was never called');
+  assert.ok(
+    tavilyCall.startsWith('https://api.tavily.com/'),
+    'tavily inherited the shared endpoint: ' + tavilyCall,
+  );
+});
+
 await check('a shared apiKey from an older file migrates to its provider slot', () => {
   const legacy = normalizeSettings({ provider: 'brave', apiKey: 'old-key' });
   assert.deepEqual(legacy.apiKeys, { brave: 'old-key' });

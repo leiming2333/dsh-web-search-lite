@@ -98,6 +98,8 @@ const PROVIDERS = {
     needsKey: false,
     limit: 50,
     docs: '',
+    // The one thing that separates this from `all`: keyed providers join in.
+    includeKeyed: true,
   },
   all: {
     label: '免密钥聚合',
@@ -1073,10 +1075,12 @@ function interleave(lists, limit) {
  * @param provider - `aggregate` or `all`.
  * @returns provider ids to query, in a stable order.
  */
-function fanoutEngines(cfg, provider = 'all') {
+function fanoutEngines(cfg, mode = false) {
   const ids = ['duckduckgo', 'bingweb', 'baidu', 'so360']
   if (cfg.endpoint !== '') ids.push('searxng')
-  if (provider === 'aggregate') {
+  // `searchAll` passes the provider's flag; the id form stays for callers that
+  // only have a name (tests, the tool's own `provider` argument).
+  if (mode === true || mode === 'aggregate') {
     for (const id of KEYED_PROVIDER_IDS) {
       if (providerKey(cfg, id) !== '') ids.push(id)
     }
@@ -1120,12 +1124,19 @@ function providerKey(cfg, id) {
  * @returns `{ sources, engines }`.
  */
 async function searchAll(provider, cfg, query, count, signal) {
-  const ids = fanoutEngines(cfg, provider)
+  const ids = fanoutEngines(cfg, provider.includeKeyed === true)
   // Ask for more per engine than the caller needs, so the overlap removed by
   // de-duplication does not eat the whole budget.
   const perEngine = Math.max(count, 6)
   const settled = await Promise.allSettled(
-    ids.map((id) => SEARCHERS[id](PROVIDERS[id], cfg, query, perEngine, signal)),
+    ids.map((id) => {
+      // `cfg.endpoint` is a single override meant for one provider. Letting every
+      // keyed provider inherit it would send Tavily's query to Brave's URL, so in a
+      // fan-out each keyed provider falls back to its own official endpoint.
+      // SearXNG and the page readers keep it: they are what the field is for.
+      const engineCfg = PROVIDERS[id].needsKey ? { ...cfg, endpoint: '' } : cfg
+      return SEARCHERS[id](PROVIDERS[id], engineCfg, query, perEngine, signal)
+    }),
   )
 
   const engines = []
