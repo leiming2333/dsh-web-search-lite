@@ -397,17 +397,6 @@ const cases = [
     },
   },
   {
-    provider: 'bing',
-    payload: {
-      webPages: {
-        value: [
-          { url: 'https://a.example/1', name: 'A', snippet: 'snippet a', dateLastCrawled: '2026-01-01' },
-          { url: 'https://b.example/2', name: 'B', snippet: 'snippet b' },
-        ],
-      },
-    },
-  },
-  {
     provider: 'searxng',
     payload: {
       results: [

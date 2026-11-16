@@ -1,5 +1,20 @@
 # 变更记录
 
+## 1.5.0 — 2026-11-16
+
+### 新增
+
+- **[docs/api-providers.md](docs/api-providers.md)**：四家搜索 API 的完整配置指南——怎么注册、免费额度多少、key 填在哪、每种错误码怎么处理。README 的申请表格太挤，放不下的部分挪到了这里。
+
+### 移除
+
+- **Bing Web Search API**（`bing` provider）。微软 2025-08-11 退役了 Bing Search API v7，端点返回 `410 Gone`，新注册在 2025 年 2 月就关了。留着一个永远失败的选项，不如删掉并在文档里说明替代方案。
+- 剩下四家：Tavily、Serper、Brave、Exa。免密钥的 `bingweb`（Bing 网页抓取）不受影响，那是另一条路径。
+
+### 文档
+
+- README 的 API 表格精简，指向新文档；中英文同步。
+
 ## 1.4.1 — 2026-11-11
 
 ### 新增

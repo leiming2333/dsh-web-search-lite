@@ -181,14 +181,6 @@ const PROVIDERS = {
     limit: 100,
     docs: 'https://dashboard.exa.ai/api-keys',
   },
-  bing: {
-    label: 'Bing Web Search API',
-    mode: 'api',
-    endpoint: 'https://api.bing.microsoft.com/v7.0/search',
-    needsKey: true,
-    limit: 50,
-    docs: 'https://portal.azure.com/',
-  },
 }
 
 /** Provider ids in a stable order, used by messages and the Settings page. */
@@ -925,28 +917,6 @@ async function searchExa(provider, cfg, query, count, signal) {
   }
 }
 
-/** Bing: GET /v7.0/search, key in Ocp-Apim-Subscription-Key. */
-async function searchBing(provider, cfg, query, count, signal) {
-  const url = new URL(cfg.endpoint || provider.endpoint)
-  url.searchParams.set('q', query)
-  url.searchParams.set('count', String(Math.min(count, provider.limit)))
-  if (cfg.language !== '') url.searchParams.set('mkt', cfg.language)
-  const payload = await requestJson(provider, url.toString(), {
-    method: 'GET',
-    headers: { 'ocp-apim-subscription-key': providerKey(cfg, 'bing') },
-    signal,
-  })
-  return {
-    sources: collect(
-      (payload.webPages?.value ?? []).map((row) => ({
-        url: row.url,
-        title: row.name,
-        snippet: row.snippet,
-        publishedAt: row.dateLastCrawled,
-      })),
-    ),
-  }
-}
 
 /** 360 Search's public results page. */
 async function searchSo360(provider, cfg, query, count, signal) {
@@ -997,7 +967,6 @@ const SEARCHERS = {
   serper: searchSerper,
   brave: searchBrave,
   exa: searchExa,
-  bing: searchBing,
 }
 
 // ---------------------------------------------------------------------------
@@ -1608,7 +1577,7 @@ export function apply(ctx) {
         name: 'web_search_api',
         description:
           'Search the web through the engine configured in Settings → Web search. The default is to query DuckDuckGo, Bing 网页, 百度 and 360 at once and merge their ranking; a single engine can be selected if one keeps failing. '
-          + 'Engines that need no account (DuckDuckGo, Bing 网页, 百度, 360) work out of the box; a configured API provider (Tavily, Serper, Brave, Exa, Bing Web Search API, SearXNG) is steadier when the user has a key. '
+          + 'Engines that need no account (DuckDuckGo, Bing 网页, 百度, 360) work out of the box; a configured API provider (Tavily, Serper, Brave, Exa, SearXNG) is steadier when the user has a key. '
           + "Use it for anything that needs current information beyond the model's knowledge: news, prices, releases, docs, people, or a fact you want a source for. "
           + 'Returns ranked sources with title, URL and snippet; follow up with web_fetch_api on a URL when the snippet is not enough. '
           + 'Prefer several focused queries over one broad one. If one engine reports that it cannot parse results or is rate-limited, retry once with another provider instead of giving up. '

@@ -283,14 +283,6 @@ window.__ModuleLoader__.load({
 				docs: 'https://dashboard.exa.ai/api-keys',
 				endpoints: ['https://api.exa.ai/search'],
 			},
-			{
-				id: 'bing',
-				label: 'Bing Web Search API',
-				needsKey: true,
-				mode: 'api',
-				docs: 'https://portal.azure.com/',
-				endpoints: ['https://api.bing.microsoft.com/v7.0/search'],
-			},
 		];
 
 		/** A provider nobody recognised still shows something usable in the hint. */

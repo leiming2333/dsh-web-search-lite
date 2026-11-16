@@ -88,7 +88,10 @@ query
 | `serper` | Serper（Google 结果） | https://serper.dev/api-key | 结果最接近 Google，可带 answerBox |
 | `brave` | Brave Search | https://api.search.brave.com/app/keys | 独立索引 |
 | `exa` | Exa | https://dashboard.exa.ai/api-keys | 语义搜索，直接返回正文片段 |
-| `bing` | Bing Web Search API | https://portal.azure.com/ | 在 Azure 里创建 Bing Search 资源 |
+
+**完整的配置指南**（每家怎么注册、免费额度、怎么填、常见错误）：[docs/api-providers.md](https://github.com/leiming2333/dsh-web-search-lite/blob/main/docs/api-providers.md)
+
+> Bing Web Search API 已于 2025-08-11 退役，端点返回 `410 Gone`，所以列表里没有它。
 
 加一家新的：在 `index.js` 的 `PROVIDERS` 加一条描述，在 `SEARCHERS` 加一个把该家响应映射成 `{ answer?, sources[] }` 的函数。去重、截断、错误文案、渲染都是共享的。
 

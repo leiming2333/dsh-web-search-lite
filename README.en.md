@@ -24,9 +24,11 @@ Both report the next step on failure — a challenge page suggests another engin
 
 ## Engines
 
-**No key needed:** `all` (default — all four, round-robin merged and de-duplicated), `duckduckgo`, `bingweb`, `baidu`, `so360`, `searxng` (self-hosted, endpoint required).
+**No key needed:** `aggregate` (default — the four no-key engines plus any API provider that has a key), `all` (the no-key engines only), `duckduckgo`, `bingweb`, `baidu`, `so360`, `searxng` (self-hosted, endpoint required).
 
-**API key:** `tavily`, `serper` (Google results), `brave`, `exa`, `bing` (Bing Web Search API).
+**API key:** `tavily`, `serper` (Google results), `brave`, `exa`. Setup guide: [docs/api-providers.md](https://github.com/leiming2333/dsh-web-search-lite/blob/main/docs/api-providers.md).
+
+Bing Web Search API is absent on purpose: Microsoft retired it on 2025-08-11 and its endpoints now answer `410 Gone`.
 
 The no-key engines are read from their public results pages — nothing to sign up for, and the page structure belongs to the engine, so a redesign or bot check can break one for a while. Failures are reported per engine; in `all`, one engine failing costs only its share of the results.
 
