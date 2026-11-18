@@ -294,13 +294,17 @@ function normalizeApiKeys(source) {
     : {}
   const keys = {}
   for (const id of KEYED_PROVIDER_IDS) {
-    const value = String(raw[id] ?? '').trim()
-    if (value !== '') keys[id] = value
+    const slot = raw[id]
+    const list = Array.isArray(slot) ? slot : [slot]
+    const cleaned = list
+      .map((item) => String(item ?? '').trim())
+      .filter((item) => item !== '')
+    if (cleaned.length > 0) keys[id] = cleaned
   }
   if (Object.keys(keys).length === 0) {
     const legacy = String(source.apiKey ?? '').trim()
     const owner = String(source.provider ?? '').trim().toLowerCase()
-    if (legacy !== '' && KEYED_PROVIDER_IDS.includes(owner)) keys[owner] = legacy
+    if (legacy !== '' && KEYED_PROVIDER_IDS.includes(owner)) keys[owner] = [legacy]
   }
   return keys
 }
@@ -443,7 +447,13 @@ async function requestJson(provider, url, init) {
   const headers = { accept: 'application/json', 'user-agent': USER_AGENT, ...init.headers }
   const response = await fetch(url, { ...init, headers })
   const text = await response.text()
-  if (!response.ok) throw new Error(httpFailure(provider, response.status, text))
+  if (!response.ok) {
+    const error = new Error(httpFailure(provider, response.status, text))
+    // Kept as a property so callers can tell "this key is out of quota" (401/402/429)
+    // from "this request is wrong" (400/404), which must not trigger a key switch.
+    error.status = response.status
+    throw error
+  }
   if (text.trim() === '') return {}
   try {
     return JSON.parse(text)
@@ -802,19 +812,21 @@ async function searchBaidu(provider, cfg, query, count, signal) {
  * meant for a model to read. This plugin feeds a model, so it prefers the latter.
  */
 async function searchDeepseek(provider, cfg, query, count, signal) {
-  const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${providerKey(cfg, 'deepseek')}`,
-    },
-    body: JSON.stringify({
-      query,
-      count: Math.min(count, provider.limit),
-      need_content: false,
+  const payload = await withKeyPool(provider, cfg, 'deepseek', (key) =>
+    requestJson(provider, cfg.endpoint || provider.endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        query,
+        count: Math.min(count, provider.limit),
+        need_content: false,
+      }),
+      signal,
     }),
-    signal,
-  })
+  )
   return {
     sources: collect(
       (Array.isArray(payload.results) ? payload.results : []).map((row) => ({
@@ -958,28 +970,83 @@ function fanoutEngines(cfg, mode = false) {
   // only have a name (tests, the tool's own `provider` argument).
   if (mode === true || mode === 'aggregate') {
     for (const id of KEYED_PROVIDER_IDS) {
-      if (providerKey(cfg, id) !== '') ids.push(id)
+      if (providerKeys(cfg, id).length > 0) ids.push(id)
     }
   }
   return ids
 }
 
-/**
- * The key configured for one provider.
+/** The keys configured for one provider, in order.
  *
- * Keys are stored per provider (`apiKeys`); a bare `apiKey` from an older settings
- * file is still honoured for that file's selected provider, so upgrading does not
- * silently drop someone's credential.
+ * A slot holds a pool: several keys for the same service, used one after another as
+ * each runs out of quota. Older settings files store a single string, read here as a
+ * one-element pool. A bare `apiKey` from an even older file is honoured for that
+ * file's selected provider so upgrading does not drop someone's credential.
  *
  * @param cfg - settings snapshot.
  * @param id - provider id.
- * @returns the key, or an empty string.
+ * @returns the keys, best-first; empty when none is configured.
  */
-function providerKey(cfg, id) {
+function providerKeys(cfg, id) {
   const stored = cfg.apiKeys?.[id]
-  if (typeof stored === 'string' && stored !== '') return stored
-  if (cfg.provider === id && typeof cfg.apiKey === 'string' && cfg.apiKey !== '') return cfg.apiKey
-  return ''
+  if (Array.isArray(stored)) {
+    const keys = stored.filter((item) => typeof item === 'string' && item !== '')
+    if (keys.length > 0) return keys
+  }
+  if (typeof stored === 'string' && stored !== '') return [stored]
+  if (cfg.provider === id && typeof cfg.apiKey === 'string' && cfg.apiKey !== '') return [cfg.apiKey]
+  return []
+}
+
+/** Which key each provider is currently on. Process-local: a restart starts over. */
+const keyCursor = new Map()
+
+/** Statuses that mean "this key cannot serve this request", not "the request is bad". */
+function isKeyFailure(error) {
+  return error?.status === 401 || error?.status === 402 || error?.status === 429
+}
+
+/**
+ * Run one request against a provider's key pool, moving to the next key when the
+ * current one is rejected for quota or auth reasons.
+ *
+ * A 400/404 is the caller's mistake and is thrown straight back — retrying it with
+ * another key would only waste the rest of the pool. Only when every key fails does
+ * this throw, and the message lists each key's own reason, so "all three expired"
+ * reads differently from "the third is empty".
+ *
+ * @param provider - the provider definition (for its label).
+ * @param cfg - settings snapshot.
+ * @param id - the provider id whose pool to use.
+ * @param attempt - receives one key, returns the parsed payload.
+ * @returns whatever `attempt` resolved to.
+ */
+async function withKeyPool(provider, cfg, id, attempt) {
+  const keys = providerKeys(cfg, id)
+  if (keys.length === 0) {
+    throw new Error(
+      `还没有配置 ${provider.label} 的 API Key，因此无法搜索。`
+        + '请让用户在「设置 → 网络搜索」里填入密钥并保存；也可以先用 provider 参数切到一个免密钥引擎（duckduckgo、bingweb、baidu、so360）。',
+    )
+  }
+  const start = keyCursor.get(id) ?? 0
+  const failures = []
+  for (let offset = 0; offset < keys.length; offset++) {
+    const index = (start + offset) % keys.length
+    try {
+      const value = await attempt(keys[index])
+      keyCursor.set(id, index)
+      return value
+    } catch (error) {
+      if (!isKeyFailure(error)) throw error
+      const reason = String(error.message ?? error).split('\n')[0]
+      failures.push(`第 ${index + 1} 个：${reason}`)
+      // Aim the next call at the one after the failure, so a dead key is not
+      // retried first on every request.
+      keyCursor.set(id, (index + 1) % keys.length)
+    }
+  }
+  throw new Error(`${provider.label} 的 ${keys.length} 个 Key 都不可用：${failures.join('；')}。`)
 }
 
 /**
@@ -1067,7 +1134,7 @@ async function runSearch(query, options, cfg, signal) {
         + '请在「设置 → 网络搜索」里选择，或在调用时用 provider 参数指定。',
     )
   }
-  if (provider.needsKey && providerKey(cfg, providerId) === '') {
+  if (provider.needsKey && providerKeys(cfg, providerId).length === 0) {
     throw new Error(
       `还没有配置 ${provider.label} 的 API Key，因此无法搜索。`
         + '请让用户在「设置 → 网络搜索」里填入密钥并保存；也可以先用 provider 参数切到一个免密钥引擎（duckduckgo、bingweb、baidu、so360）。',
@@ -1259,15 +1326,15 @@ function maskKey(key) {
 /**
  * The settings view the browser is allowed to see.
  *
- * The keys themselves never cross the wire: the page learns, per provider, whether
- * one is configured and a masked preview — enough to show state and to decide
+ * The keys themselves never cross the wire: the page learns, per provider, how many
+ * are in the pool and a masked preview of each — enough to show state and to decide
  * whether an empty field means "keep" or "missing".
  */
 function publicSettings(settings, problem) {
   const apiKeys = {}
   for (const id of KEYED_PROVIDER_IDS) {
-    const key = providerKey(settings, id)
-    apiKeys[id] = { has: key !== '', preview: maskKey(key) }
+    const keys = providerKeys(settings, id)
+    apiKeys[id] = { count: keys.length, previews: keys.map((key) => maskKey(key)) }
   }
   return {
     provider: settings.provider,
@@ -1364,10 +1431,15 @@ function mergeSettings(current, patch) {
     // an empty string there means "clear this one", not "clear all of them".
     next.apiKeys = { ...(current.apiKeys ?? {}) }
     for (const id of KEYED_PROVIDER_IDS) {
-      if (patch.apiKeys[id] === undefined || patch.apiKeys[id] === null) continue
-      const value = String(patch.apiKeys[id]).trim()
-      if (value === '') delete next.apiKeys[id]
-      else next.apiKeys[id] = value
+      const slot = patch.apiKeys[id]
+      if (slot === undefined || slot === null) continue
+      // The page sends the whole pool for the slots it edited: a list of keys, or a
+      // bare string for one. An empty list clears that provider.
+      const cleaned = (Array.isArray(slot) ? slot : [slot])
+        .map((item) => String(item ?? '').trim())
+        .filter((item) => item !== '')
+      if (cleaned.length === 0) delete next.apiKeys[id]
+      else next.apiKeys[id] = cleaned
     }
   }
   return normalizeSettings(next)
@@ -1596,7 +1668,9 @@ export const __test = {
   DEFAULTS,
   normalizeSettings,
   normalizeApiKeys,
-  providerKey,
+  providerKeys,
+  withKeyPool,
+  keyCursor,
   mergeSettings,
   maskKey,
   publicSettings,

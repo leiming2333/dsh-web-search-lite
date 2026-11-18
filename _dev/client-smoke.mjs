@@ -185,7 +185,7 @@ function textOf(tree) {
 
 const View = {
   provider: 'deepseek',
-  apiKeys: { deepseek: { has: true, preview: 'abcd…wxyz' } },
+  apiKeys: { deepseek: { count: 1, previews: ['abcd…wxyz'] } },
   endpoint: '',
   maxResults: 8,
   timeoutMs: 20000,
@@ -272,7 +272,8 @@ await check('the ready page renders every field', () => {
   const selects = nodes.filter((node) => node.type === 'select');
   const options = nodes.filter((node) => node.type === 'option');
   assert.ok(options.length >= 8, 'engine options plus endpoint presets');
-  assert.equal(inputs.length, 6, `expected 6 inputs, saw ${inputs.length}`);
+  assert.equal(inputs.length, 5, `expected 5 inputs (the key field became a textarea), saw ${inputs.length}`);
+  assert.equal(nodes.filter((node) => node.type === 'textarea').length, 1, 'expected the key pool textarea');
   assert.equal(selects.length, 1, 'expected the provider select');
   // `datalist` also renders options, so engines are counted per optgroup below.
   const groups = nodes.filter((node) => node.type === 'optgroup');
@@ -282,14 +283,14 @@ await check('the ready page renders every field', () => {
   assert.equal(groups[1].children.length, 1, 'keyed group holds only the official API now');
   assert.equal(groups[0].children.length + groups[1].children.length, 8, 'every engine appears exactly once');
   const types = inputs.map((node) => node.props.type);
-  assert.ok(types.includes('password'), 'the key field should be masked');
+  assert.ok(!types.includes('password'), 'keys now go into a textarea, not a masked input');
   assert.equal(types.filter((type) => type === 'number').length, 3, 'expected three number inputs');
   assert.equal(nodes.filter((node) => node.type === 'button').length, 4, 'save, test, reveal, clear');
 });
 
 await check('the ready page marks the configured key and offers to clear it', () => {
   const text = textOf(renderWith(pageState({})));
-  assert.match(text, /已配置密钥：abcd…wxyz/);
+  assert.match(text, /池中密钥：1 · abcd…wxyz/);
   assert.match(text, /清除密钥/);
 });
 
@@ -317,17 +318,19 @@ await check('a no-key engine disables the key field and explains why', () => {
   const text = textOf(tree);
   assert.match(text, /这个引擎不需要密钥/);
   assert.match(text, /结果来自该引擎的公开网页/);
-  const keyInput = walk(tree).find((node) => node.type === 'input' && node.props.type === 'password');
+  const keyInput = walk(tree).find((node) => node.type === 'textarea');
   assert.equal(keyInput, undefined, 'a no-key engine must not render a key field at all');
   const buttons = walk(tree).filter((node) => node.type === 'button');
   assert.ok(!buttons.some((node) => textOf(node) === '显示'), 'reveal was offered with no key field');
   assert.ok(!buttons.some((node) => textOf(node).includes('清除密钥')), 'clear was offered with no key');
 });
 
-await check('an API provider re-enables the key field', () => {
+await check('an API provider renders an editable key pool', () => {
   const tree = renderWith(pageState({}));
-  const keyInput = walk(tree).find((node) => node.type === 'input' && node.props.type === 'password');
-  assert.equal(keyInput.props.disabled, false, 'the key field is disabled for an API provider');
+  const keyInput = walk(tree).find((node) => node.type === 'textarea');
+  assert.ok(keyInput !== undefined, 'no key pool textarea');
+  assert.equal(keyInput.props.disabled, false, 'the key pool is disabled for an API provider');
+  assert.match(String(keyInput.props.placeholder), /一行一个/, 'the pool hint must explain one key per line');
 });
 
 await check('an edited form enables save and shows discard', () => {

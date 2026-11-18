@@ -23,6 +23,9 @@ const {
   providerKey,
   mergeSettings,
   maskKey,
+  providerKeys,
+  withKeyPool,
+  keyCursor,
   publicSettings,
   htmlToText,
   runSearch,
@@ -211,7 +214,7 @@ await check('normalizeSettings clamps every out-of-range field', () => {
   assert.equal(settings.fetchMaxChars, 200000);
   assert.equal(settings.includeAnswer, false, 'a non-true value must not enable a switch');
   assert.equal(settings.enableFetch, false);
-  assert.deepEqual(settings.apiKeys, { deepseek: 'key' }, 'values are trimmed and unknown ids dropped');
+  assert.deepEqual(settings.apiKeys, { deepseek: ['key'] }, 'values are trimmed, unknown ids dropped, and a bare string becomes a one-element pool');
 });
 
 await check('settings round-trip through the state file', () => {
@@ -219,7 +222,7 @@ await check('settings round-trip through the state file', () => {
   const { settings, problem } = readSettings();
   assert.equal(problem, undefined);
   assert.equal(settings.provider, 'deepseek');
-  assert.deepEqual(settings.apiKeys, { deepseek: 'secret-key-value' });
+  assert.deepEqual(settings.apiKeys, { deepseek: ['secret-key-value'] });
   assert.equal(settings.maxResults, 12);
   assert.ok(fs.existsSync(settingsPath()));
   assert.ok(settingsPath().startsWith(home), 'state must live under DSH_HOME');
@@ -236,18 +239,18 @@ await check('a broken settings file degrades to defaults with a reported problem
 await check('mergeSettings keeps, replaces and clears the key slot', () => {
   // Only one keyed provider is left, so this is now a single slot: absent or null
   // keeps what is stored, a value replaces it, and "" clears it.
-  const base = normalizeSettings({ apiKeys: { deepseek: 'stored' } });
-  assert.deepEqual(mergeSettings(base, { provider: 'aggregate' }).apiKeys, { deepseek: 'stored' }, 'untouched');
-  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: null } }).apiKeys, { deepseek: 'stored' }, 'null keeps');
-  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: 'fresh' } }).apiKeys, { deepseek: 'fresh' }, 'replace');
+  const base = normalizeSettings({ apiKeys: { deepseek: ['stored'] } });
+  assert.deepEqual(mergeSettings(base, { provider: 'aggregate' }).apiKeys, { deepseek: ['stored'] }, 'untouched');
+  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: null } }).apiKeys, { deepseek: ['stored'] }, 'null keeps');
+  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: 'fresh' } }).apiKeys, { deepseek: ['fresh'] }, 'replace');
   assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: '' } }).apiKeys, {}, 'empty string clears');
 });
 
 await check('the public view never carries a key', () => {
   const view = publicSettings(normalizeSettings({ apiKeys: { deepseek: 'sk-1234567890abcd' } }));
   assert.equal(view.apiKey, undefined, 'the key leaked into the view');
-  assert.deepEqual(view.apiKeys.deepseek, { has: true, preview: 'sk-1…abcd' });
-  assert.deepEqual(view.apiKeys.deepseek.has, true);
+  assert.deepEqual(view.apiKeys.deepseek, { count: 1, previews: ['sk-1…abcd'] });
+  assert.equal(view.apiKeys.deepseek.count, 1);
   assert.equal(JSON.stringify(view).includes('1234567890'), false);
 });
 
@@ -313,11 +316,11 @@ await check('a fan-out keeps every API provider on its own endpoint', async () =
 
 await check('a shared apiKey from an older file migrates to its provider slot', () => {
   const legacy = normalizeSettings({ provider: 'deepseek', apiKey: 'old-key' });
-  assert.deepEqual(legacy.apiKeys, { deepseek: 'old-key' });
-  assert.equal(providerKey(legacy, 'deepseek'), 'old-key');
+  assert.deepEqual(legacy.apiKeys, { deepseek: ['old-key'] });
+  assert.deepEqual(providerKeys(legacy, 'deepseek'), ['old-key']);
   // A keyed provider outside its own slot stays unknown to the others.
-  const perProvider = normalizeSettings({ apiKeys: { deepseek: 'ds-key' } });
-  assert.equal(providerKey(perProvider, 'deepseek'), 'ds-key');
+  const perProvider = normalizeSettings({ apiKeys: { deepseek: ['ds-key'] } });
+  assert.deepEqual(providerKeys(perProvider, 'deepseek'), ['ds-key']);
 });
 
 await check('maskKey keeps only the ends', () => {
@@ -390,6 +393,46 @@ await check('deepseek feeds the model the long summary, not the short snippet', 
   assert.equal(value.sources.length, 1);
   assert.equal(value.sources[0].snippet, 'long', 'the model-facing summary should win over the UI snippet');
   assert.equal(value.sources[0].publishedAt, '2026-01-01T00:00:00+00:00');
+});
+
+await check('a key pool moves to the next key when one runs out', async () => {
+  keyCursor.clear();
+  calls.length = 0;
+  mockFetch((url, init) => {
+    if (init.headers.authorization === 'Bearer sk-a') return { status: 402, text: 'insufficient balance' };
+    return { json: { results: [{ url: 'https://x/1', title: 'A', summary: 's' }] } };
+  });
+  const value = await searchWith({ provider: 'deepseek', apiKeys: { deepseek: ['sk-a', 'sk-b'] } });
+  assert.equal(value.sources.length, 1, 'the second key should have answered');
+  assert.equal(calls.length, 2, 'exactly two attempts');
+  assert.equal(calls[1].init.headers.authorization, 'Bearer sk-b');
+
+  // The dead key must not be retried first on the next call.
+  calls.length = 0;
+  await searchWith({ provider: 'deepseek', apiKeys: { deepseek: ['sk-a', 'sk-b'] } });
+  assert.equal(calls[0].init.headers.authorization, 'Bearer sk-b', 'a spent key should not be tried first again');
+});
+
+await check('a key pool reports every key when all of them fail', async () => {
+  keyCursor.clear();
+  mockFetch(() => ({ status: 402, text: 'no balance' }));
+  await assert.rejects(
+    () => searchWith({ provider: 'deepseek', apiKeys: { deepseek: ['sk-a', 'sk-b'] } }),
+    (error) => {
+      assert.match(error.message, /2 个 Key 都不可用/);
+      assert.match(error.message, /第 1 个/);
+      assert.match(error.message, /第 2 个/);
+      return true;
+    },
+  );
+});
+
+await check('a bad request does not burn through the key pool', async () => {
+  keyCursor.clear();
+  calls.length = 0;
+  mockFetch(() => ({ status: 400, text: 'bad query' }));
+  await assert.rejects(() => searchWith({ provider: 'deepseek', apiKeys: { deepseek: ['sk-a', 'sk-b'] } }));
+  assert.equal(calls.length, 1, 'a 400 is the request\'s fault, not the key\'s — do not retry with another');
 });
 
 for (const testCase of cases) {
@@ -471,7 +514,7 @@ await check('401 points at the key and 429 at the quota', async () => {
   mockFetch(() => ({ status: 401, text: 'unauthorized' }));
   await assert.rejects(() => searchWith({ provider: 'deepseek', apiKeys: { deepseek: 'wrong' } }), (error) => {
     assert.match(error.message, /API Key 无效/);
-    assert.match(error.message, /unauthorized/);
+    assert.match(error.message, /API Key 无效/, 'the provider reason must survive the pool wrapper');
     return true;
   });
   mockFetch(() => ({ status: 429, text: 'slow down' }));
@@ -798,7 +841,7 @@ await check('GET /settings returns the masked view', async () => {
   );
   assert.equal(answer.status, 200);
   assert.equal(answer.json.settings.provider, 'deepseek');
-  assert.equal(answer.json.settings.apiKeys.deepseek.has, true);
+  assert.equal(answer.json.settings.apiKeys.deepseek.count, 1);
   assert.ok(!JSON.stringify(answer.json).includes('abcdefghijkl'), 'the key crossed the wire');
 });
 
@@ -815,8 +858,8 @@ await check('POST /settings persists a patch and keeps an untouched key', async 
   assert.equal(answer.status, 200);
   assert.equal(answer.json.settings.provider, 'deepseek');
   assert.equal(answer.json.settings.maxResults, 4);
-  assert.equal(answer.json.settings.apiKeys.deepseek.has, true, 'the stored key was dropped');
-  assert.equal(readSettings().settings.apiKeys.deepseek, 'stored-key');
+  assert.equal(answer.json.settings.apiKeys.deepseek.count, 1, 'the stored key was dropped');
+  assert.deepEqual(readSettings().settings.apiKeys.deepseek, ['stored-key']);
 });
 
 await check('POST /settings clears the key on an explicit empty string', async () => {
@@ -830,7 +873,7 @@ await check('POST /settings clears the key on an explicit empty string', async (
     }),
   );
   assert.equal(answer.status, 200);
-  assert.equal(answer.json.settings.apiKeys.deepseek.has, false);
+  assert.equal(answer.json.settings.apiKeys.deepseek.count, 0);
   assert.deepEqual(readSettings().settings.apiKeys, {}, 'the only slot was cleared');
 });
 

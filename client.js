@@ -59,6 +59,9 @@ window.__ModuleLoader__.load({
 			apiKeyPlaceholder: 'Paste a key to set or replace it',
 			apiKeySet: 'A key is configured: ',
 			apiKeyUnset: 'No key configured yet.',
+			apiKeyCount: 'Keys in pool: ',
+			apiKeyPoolEmpty: 'One key per line. The next one is used when the current runs out of quota.',
+			apiKeyPoolPlaceholder: 'Paste keys to replace the pool — one per line. Leave empty to keep what is stored.',
 			apiKeyClear: 'Clear key',
 			apiKeyShow: 'Show',
 			apiKeyHide: 'Hide',
@@ -134,6 +137,9 @@ window.__ModuleLoader__.load({
 			apiKeyPlaceholder: '粘贴密钥以设置或替换',
 			apiKeySet: '已配置密钥：',
 			apiKeyUnset: '尚未配置密钥。',
+			apiKeyCount: '池中密钥：',
+			apiKeyPoolEmpty: '一行一个密钥。当前这个额度用完后会自动换下一个。',
+			apiKeyPoolPlaceholder: '粘贴密钥以替换整个池子——一行一个。留空表示保持现状。',
 			apiKeyClear: '清除密钥',
 			apiKeyShow: '显示',
 			apiKeyHide: '隐藏',
@@ -770,12 +776,12 @@ window.__ModuleLoader__.load({
 						),
 					),
 					...keyTargets.map((target) => {
-						const slot = view.apiKeys?.[target.id] ?? { has: false, preview: '' };
+						const slot = view.apiKeys?.[target.id] ?? { count: 0, previews: [] };
 						const edited = keyTouched.has(target.id);
 						const typed = (draft.apiKeys[target.id] ?? '').trim();
 						// What the badge should say: an edited slot reflects the input, an
 						// untouched one reflects what the Host reported.
-						const has = edited ? typed !== '' : slot.has;
+						const has = edited ? typed !== '' : slot.count > 0;
 						return h(
 							Field,
 							{
@@ -794,15 +800,22 @@ window.__ModuleLoader__.load({
 							h(
 								'div',
 								{ style: styles.row },
-								h('input', {
-									type: revealed ? 'text' : 'password',
+								h('textarea', {
+									// One key per line: the pool is tried top to bottom, moving on
+									// when one runs out of quota.
+									rows: 3,
 									value: draft.apiKeys[target.id] ?? '',
-									placeholder: slot.has && !edited ? t('apiKeyPlaceholder') : '',
+									placeholder: slot.count > 0 && !edited ? t('apiKeyPoolPlaceholder') : t('apiKeyPoolEmpty'),
 									disabled: busy,
 									autoComplete: 'off',
 									spellCheck: false,
 									onChange: (event) => editKey(target.id, event.target.value),
-									style: { ...styles.input, flex: '1 1 auto', minWidth: 0 },
+									style: {
+										...styles.input,
+										fontFamily: 'ui-monospace, monospace',
+										fontSize: '12px',
+										resize: 'vertical',
+									},
 								}),
 								h(
 									'button',
@@ -829,7 +842,11 @@ window.__ModuleLoader__.load({
 							h(
 								'p',
 								{ style: styles.badge },
-								has ? `${t('apiKeySet')}${edited ? typed : slot.preview}` : t('apiKeyUnset'),
+								has
+									? edited
+										? `${t('apiKeyCount')}${typed.split('\n').filter((line) => line.trim() !== '').length}`
+										: `${t('apiKeyCount')}${slot.count}${slot.previews.length > 0 ? ` · ${slot.previews.join(' ')}` : ''}`
+									: t('apiKeyUnset'),
 							),
 						);
 					}),
