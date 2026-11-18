@@ -26,9 +26,9 @@ Both report the next step on failure — a challenge page suggests another engin
 
 **No key needed:** `aggregate` (default — the four no-key engines plus any API provider that has a key), `all` (the no-key engines only), `duckduckgo`, `bingweb`, `baidu`, `so360`, `searxng` (self-hosted, endpoint required).
 
-**API key:** `tavily`, `serper` (Google results), `brave`, `exa`. Setup guide: [docs/api-providers.md](https://github.com/leiming2333/dsh-web-search-lite/blob/main/docs/api-providers.md).
+**API key:** `deepseek` only — the official Search API. Setup guide: [docs/deepseek-api.md](https://github.com/leiming2333/dsh-web-search-lite/blob/main/docs/deepseek-api.md).
 
-Bing Web Search API is absent on purpose: Microsoft retired it on 2025-08-11 and its endpoints now answer `410 Gone`.
+Third-party search APIs (Tavily, Serper, Brave, Exa) and Bing were removed: the official one is cheaper, steadier, and understands query operators.
 
 The no-key engines are read from their public results pages — nothing to sign up for, and the page structure belongs to the engine, so a redesign or bot check can break one for a while. Failures are reported per engine; in `all`, one engine failing costs only its share of the results.
 
@@ -94,7 +94,7 @@ Stored in `<DSH_HOME>/web-search-pro/settings.json` (default `~/.dsh/web-search-
 | Field | Default | Meaning |
 |---|---|---|
 | `provider` | `aggregate` | Engine to use. `aggregate` queries the no-key engines **and** every API provider that has a key; `all` queries only the no-key ones; a single id picks one engine. |
-| `apiKeys` | empty | Per-provider keys, e.g. `{ "tavily": "tvly-…" }`. Only providers with a key are called by `aggregate`. |
+| `apiKeys` | empty | The key, e.g. `{ "deepseek": "sk-…" }`. Only providers with a key are called by `aggregate`. |
 | `endpoint` | empty | Custom base URL; required for SearXNG. |
 | `maxResults` | `8` | Sources per search (1–50). |
 | `timeoutMs` | `20000` | Per-request timeout (1000–120000). |

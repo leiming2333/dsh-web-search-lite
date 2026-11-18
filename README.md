@@ -85,12 +85,8 @@ query
 | `provider` | 服务 | 密钥申请 | 备注 |
 |---|---|---|---|
 | `deepseek` | DeepSeek 官方 | https://platform.deepseek.com/api_keys | 官方自研索引，支持 site:/lang:/after: 等查询语法 |
-| `tavily` | Tavily | https://app.tavily.com/home | 返回网页正文，可带生成式摘要 |
-| `serper` | Serper（Google 结果） | https://serper.dev/api-key | 结果最接近 Google，可带 answerBox |
-| `brave` | Brave Search | https://api.search.brave.com/app/keys | 独立索引 |
-| `exa` | Exa | https://dashboard.exa.ai/api-keys | 语义搜索，直接返回正文片段 |
 
-**完整的配置指南**（每家怎么注册、免费额度、怎么填、常见错误）：[docs/api-providers.md](https://github.com/leiming2333/dsh-web-search-lite/blob/main/docs/api-providers.md)
+**完整指南**（怎么拿 key、怎么充值、怎么填、计费、常见错误）：[docs/deepseek-api.md](https://github.com/leiming2333/dsh-web-search-lite/blob/main/docs/deepseek-api.md)
 
 > Bing Web Search API 已于 2025-08-11 退役，端点返回 `410 Gone`，所以列表里没有它。
 
@@ -179,7 +175,7 @@ node _dev/install.mjs --uninstall    # 回滚
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `provider` | `aggregate` | 用哪个引擎。`aggregate`（聚合模式）同时查四家免密钥引擎和所有填了 Key 的 API；`all` 只查免密钥那几家；也可以选单个引擎。 |
-| `apiKeys` | 空 | 按提供方分开存的密钥，如 `{ "tavily": "tvly-…" }`。只有填了 Key 的 API 才会被聚合模式调用。 |
+| `apiKeys` | 空 | 密钥，如 `{ "deepseek": "sk-…" }`。只有填了 key 的提供方才会被聚合模式调用。 |
 | `endpoint` | 空 | 自定义地址，留空用官方地址。设置页给了各家的官方地址作预设，可以直接选，也可以手填（换成中转地址）。聚合模式下它只作用于 SearXNG 和免密钥引擎——各家 API 始终用自己的地址。 |
 | `maxResults` | `8` | 每次结果条数（1–50，另受各家上限约束）。 |
 | `timeoutMs` | `20000` | 单次请求超时（1000–120000）。 |

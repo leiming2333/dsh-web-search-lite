@@ -157,38 +157,6 @@ const PROVIDERS = {
     limit: 50,
     docs: 'https://api-docs.deepseek.com/guides/search',
   },
-  tavily: {
-    label: 'Tavily',
-    mode: 'api',
-    endpoint: 'https://api.tavily.com/search',
-    needsKey: true,
-    limit: 20,
-    docs: 'https://app.tavily.com/home',
-  },
-  serper: {
-    label: 'Serper (Google)',
-    mode: 'api',
-    endpoint: 'https://google.serper.dev/search',
-    needsKey: true,
-    limit: 100,
-    docs: 'https://serper.dev/api-key',
-  },
-  brave: {
-    label: 'Brave Search',
-    mode: 'api',
-    endpoint: 'https://api.search.brave.com/res/v1/web/search',
-    needsKey: true,
-    limit: 20,
-    docs: 'https://api.search.brave.com/app/keys',
-  },
-  exa: {
-    label: 'Exa',
-    mode: 'api',
-    endpoint: 'https://api.exa.ai/search',
-    needsKey: true,
-    limit: 100,
-    docs: 'https://dashboard.exa.ai/api-keys',
-  },
 }
 
 /** Provider ids in a stable order, used by messages and the Settings page. */
@@ -859,104 +827,6 @@ async function searchDeepseek(provider, cfg, query, count, signal) {
   }
 }
 
-/** Tavily: POST /search, key in the Authorization header, optional direct answer. */
-async function searchTavily(provider, cfg, query, count, signal) {
-  const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${providerKey(cfg, 'tavily')}` },
-    body: JSON.stringify({
-      query,
-      max_results: Math.min(count, provider.limit),
-      search_depth: 'basic',
-      include_answer: cfg.includeAnswer,
-    }),
-    signal,
-  })
-  return {
-    answer: typeof payload.answer === 'string' ? payload.answer : undefined,
-    sources: collect(
-      (Array.isArray(payload.results) ? payload.results : []).map((row) => ({
-        url: row.url,
-        title: row.title,
-        snippet: row.content,
-        publishedAt: row.published_date,
-      })),
-    ),
-  }
-}
-
-/** Serper: POST /search, Google organic results, key in X-API-KEY. */
-async function searchSerper(provider, cfg, query, count, signal) {
-  const body = { q: query, num: Math.min(count, provider.limit) }
-  if (cfg.language !== '') body.hl = cfg.language
-  const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': providerKey(cfg, 'serper') },
-    body: JSON.stringify(body),
-    signal,
-  })
-  const answerBox = payload.answerBox ?? {}
-  const answer = answerBox.answer ?? answerBox.snippet ?? payload.knowledgeGraph?.description
-  return {
-    answer: typeof answer === 'string' && answer.trim() !== '' ? answer : undefined,
-    sources: collect(
-      (Array.isArray(payload.organic) ? payload.organic : []).map((row) => ({
-        url: row.link,
-        title: row.title,
-        snippet: row.snippet,
-        publishedAt: row.date,
-      })),
-    ),
-  }
-}
-
-/** Brave: GET /res/v1/web/search, key in X-Subscription-Token. */
-async function searchBrave(provider, cfg, query, count, signal) {
-  const url = new URL(cfg.endpoint || provider.endpoint)
-  url.searchParams.set('q', query)
-  url.searchParams.set('count', String(Math.min(count, provider.limit)))
-  if (cfg.language !== '') url.searchParams.set('search_lang', cfg.language)
-  const payload = await requestJson(provider, url.toString(), {
-    method: 'GET',
-    headers: { 'x-subscription-token': providerKey(cfg, 'brave') },
-    signal,
-  })
-  return {
-    sources: collect(
-      (payload.web?.results ?? []).map((row) => ({
-        url: row.url,
-        title: row.title,
-        snippet: row.description,
-        publishedAt: row.page_age,
-      })),
-    ),
-  }
-}
-
-/** Exa: POST /search, key in x-api-key, inline page text as the snippet. */
-async function searchExa(provider, cfg, query, count, signal) {
-  const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': providerKey(cfg, 'exa') },
-    body: JSON.stringify({
-      query,
-      numResults: Math.min(count, provider.limit),
-      contents: { text: { maxCharacters: 600 } },
-    }),
-    signal,
-  })
-  return {
-    sources: collect(
-      (Array.isArray(payload.results) ? payload.results : []).map((row) => ({
-        url: row.url,
-        title: row.title,
-        snippet: row.text ?? row.summary,
-        publishedAt: row.publishedDate,
-      })),
-    ),
-  }
-}
-
 
 /** 360 Search's public results page. */
 async function searchSo360(provider, cfg, query, count, signal) {
@@ -1004,10 +874,6 @@ const SEARCHERS = {
   so360: searchSo360,
   searxng: searchSearxng,
   deepseek: searchDeepseek,
-  tavily: searchTavily,
-  serper: searchSerper,
-  brave: searchBrave,
-  exa: searchExa,
 }
 
 // ---------------------------------------------------------------------------
@@ -1618,7 +1484,7 @@ export function apply(ctx) {
         name: 'web_search_api',
         description:
           'Search the web through the engine configured in Settings → Web search. The default is to query DuckDuckGo, Bing 网页, 百度 and 360 at once and merge their ranking; a single engine can be selected if one keeps failing. '
-          + 'Engines that need no account (DuckDuckGo, Bing 网页, 百度, 360) work out of the box; a configured API provider (Tavily, Serper, Brave, Exa, SearXNG) is steadier when the user has a key. '
+          + 'Engines that need no account (DuckDuckGo, Bing 网页, 百度, 360) work out of the box; a configured API provider (DeepSeek 官方, SearXNG) is steadier when the user has a key. '
           + "Use it for anything that needs current information beyond the model's knowledge: news, prices, releases, docs, people, or a fact you want a source for. "
           + 'Returns ranked sources with title, URL and snippet; follow up with web_fetch_api on a URL when the snippet is not enough. '
           + 'Prefer several focused queries over one broad one. If one engine reports that it cannot parse results or is rate-limited, retry once with another provider instead of giving up. '

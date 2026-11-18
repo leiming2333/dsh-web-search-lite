@@ -203,7 +203,7 @@ await check('normalizeSettings clamps every out-of-range field', () => {
     fetchMaxChars: 10_000_000,
     includeAnswer: 'yes',
     enableFetch: 1,
-    apiKeys: { tavily: '  key  ', bogus: 'dropped' },
+    apiKeys: { deepseek: '  key  ', bogus: 'dropped' },
   });
   assert.equal(settings.provider, 'aggregate', 'unknown provider must fall back to the default fan-out');
   assert.equal(settings.maxResults, 50);
@@ -211,15 +211,15 @@ await check('normalizeSettings clamps every out-of-range field', () => {
   assert.equal(settings.fetchMaxChars, 200000);
   assert.equal(settings.includeAnswer, false, 'a non-true value must not enable a switch');
   assert.equal(settings.enableFetch, false);
-  assert.deepEqual(settings.apiKeys, { tavily: 'key' }, 'values are trimmed and unknown ids dropped');
+  assert.deepEqual(settings.apiKeys, { deepseek: 'key' }, 'values are trimmed and unknown ids dropped');
 });
 
 await check('settings round-trip through the state file', () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKeys: { brave: 'secret-key-value' }, maxResults: 12 });
+  writeSettings({ ...normalizeSettings({}), provider: 'deepseek', apiKeys: { deepseek: 'secret-key-value' }, maxResults: 12 });
   const { settings, problem } = readSettings();
   assert.equal(problem, undefined);
-  assert.equal(settings.provider, 'brave');
-  assert.deepEqual(settings.apiKeys, { brave: 'secret-key-value' });
+  assert.equal(settings.provider, 'deepseek');
+  assert.deepEqual(settings.apiKeys, { deepseek: 'secret-key-value' });
   assert.equal(settings.maxResults, 12);
   assert.ok(fs.existsSync(settingsPath()));
   assert.ok(settingsPath().startsWith(home), 'state must live under DSH_HOME');
@@ -233,23 +233,21 @@ await check('a broken settings file degrades to defaults with a reported problem
   writeSettings(normalizeSettings({}));
 });
 
-await check('mergeSettings merges keys slot by slot', () => {
-  const base = normalizeSettings({ apiKeys: { exa: 'stored', brave: 'other' } });
-  assert.deepEqual(mergeSettings(base, { provider: 'brave' }).apiKeys, { exa: 'stored', brave: 'other' });
-  assert.deepEqual(mergeSettings(base, { apiKeys: { exa: null } }).apiKeys, { exa: 'stored', brave: 'other' }, 'null keeps');
-  assert.deepEqual(mergeSettings(base, { apiKeys: { exa: 'fresh' } }).apiKeys, { exa: 'fresh', brave: 'other' }, 'replace one');
-  assert.deepEqual(
-    mergeSettings(base, { apiKeys: { exa: '' } }).apiKeys,
-    { brave: 'other' },
-    'clearing one slot must not clear the others, or aggregate silently loses engines',
-  );
+await check('mergeSettings keeps, replaces and clears the key slot', () => {
+  // Only one keyed provider is left, so this is now a single slot: absent or null
+  // keeps what is stored, a value replaces it, and "" clears it.
+  const base = normalizeSettings({ apiKeys: { deepseek: 'stored' } });
+  assert.deepEqual(mergeSettings(base, { provider: 'aggregate' }).apiKeys, { deepseek: 'stored' }, 'untouched');
+  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: null } }).apiKeys, { deepseek: 'stored' }, 'null keeps');
+  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: 'fresh' } }).apiKeys, { deepseek: 'fresh' }, 'replace');
+  assert.deepEqual(mergeSettings(base, { apiKeys: { deepseek: '' } }).apiKeys, {}, 'empty string clears');
 });
 
 await check('the public view never carries a key', () => {
-  const view = publicSettings(normalizeSettings({ apiKeys: { tavily: 'tvly-1234567890abcd' } }));
+  const view = publicSettings(normalizeSettings({ apiKeys: { deepseek: 'sk-1234567890abcd' } }));
   assert.equal(view.apiKey, undefined, 'the key leaked into the view');
-  assert.deepEqual(view.apiKeys.tavily, { has: true, preview: 'tvly…abcd' });
-  assert.deepEqual(view.apiKeys.serper, { has: false, preview: '' }, 'unconfigured providers report empty');
+  assert.deepEqual(view.apiKeys.deepseek, { has: true, preview: 'sk-1…abcd' });
+  assert.deepEqual(view.apiKeys.deepseek.has, true);
   assert.equal(JSON.stringify(view).includes('1234567890'), false);
 });
 
@@ -267,10 +265,10 @@ await check('aggregate fans out to every engine that can actually answer', () =>
     'all never adds keyed providers',
   );
 
-  const keyed = normalizeSettings({ apiKeys: { tavily: 'k1', exa: 'k2' }, endpoint: 'https://searx.example.com' });
+  const keyed = normalizeSettings({ apiKeys: { deepseek: 'k1' }, endpoint: 'https://searx.example.com' });
   assert.deepEqual(
     fanoutEngines(keyed, 'aggregate'),
-    ['duckduckgo', 'bingweb', 'baidu', 'so360', 'searxng', 'tavily', 'exa'],
+    ['duckduckgo', 'bingweb', 'baidu', 'so360', 'searxng', 'deepseek'],
     'keyed providers with a key join; the ones without are skipped',
   );
   assert.deepEqual(
@@ -298,30 +296,28 @@ await check('a fan-out keeps every API provider on its own endpoint', async () =
   const cfg = normalizeSettings({
     provider: 'aggregate',
     endpoint: 'https://mirror.example/',
-    apiKeys: { tavily: 'k' },
+    apiKeys: { deepseek: 'k' },
   });
   try {
     await searchAll(PROVIDERS.aggregate, cfg, 'q', 3, new AbortController().signal);
   } catch {
     // Every engine returns an empty page here; only the request URLs matter.
   }
-  const tavilyCall = seen.find((url) => url.includes('tavily'));
-  assert.ok(tavilyCall !== undefined, 'tavily was never called');
+  const apiCall = seen.find((url) => url.includes('api.deepseek.com'));
+  assert.ok(apiCall !== undefined, 'the official API was never called');
   assert.ok(
-    tavilyCall.startsWith('https://api.tavily.com/'),
-    'tavily inherited the shared endpoint: ' + tavilyCall,
+    apiCall.startsWith('https://api.deepseek.com/'),
+    'the API inherited the shared endpoint: ' + apiCall,
   );
 });
 
 await check('a shared apiKey from an older file migrates to its provider slot', () => {
-  const legacy = normalizeSettings({ provider: 'brave', apiKey: 'old-key' });
-  assert.deepEqual(legacy.apiKeys, { brave: 'old-key' });
-  assert.equal(providerKey(legacy, 'brave'), 'old-key');
-  assert.equal(providerKey(legacy, 'tavily'), '', 'the old key belongs to one provider only');
+  const legacy = normalizeSettings({ provider: 'deepseek', apiKey: 'old-key' });
+  assert.deepEqual(legacy.apiKeys, { deepseek: 'old-key' });
+  assert.equal(providerKey(legacy, 'deepseek'), 'old-key');
   // A keyed provider outside its own slot stays unknown to the others.
-  const perProvider = normalizeSettings({ apiKeys: { exa: 'exa-key' } });
-  assert.equal(providerKey(perProvider, 'exa'), 'exa-key');
-  assert.equal(providerKey(perProvider, 'brave'), '');
+  const perProvider = normalizeSettings({ apiKeys: { deepseek: 'ds-key' } });
+  assert.equal(providerKey(perProvider, 'deepseek'), 'ds-key');
 });
 
 await check('maskKey keeps only the ends', () => {
@@ -369,49 +365,7 @@ const cases = [
         { rerank_score: 1.8, title: 'B', url: 'https://b.example/2', snippet: 'short b', summary: 'long summary b' },
       ],
     },
-  },
-  {
-    provider: 'tavily',
-    payload: {
-      answer: 'an answer',
-      results: [
-        { url: 'https://a.example/1', title: 'A', content: 'snippet a', published_date: '2026-01-01' },
-        { url: 'https://a.example/1', title: 'dup', content: 'dup' },
-        { url: 'https://b.example/2', title: 'B', content: 'snippet b' },
-      ],
-    },
-    expectAnswer: 'an answer',
-  },
-  {
-    provider: 'serper',
-    payload: {
-      answerBox: { answer: 'box answer' },
-      organic: [
-        { link: 'https://a.example/1', title: 'A', snippet: 'snippet a', date: 'Jan 1, 2026' },
-        { link: 'https://b.example/2', title: 'B', snippet: 'snippet b' },
-      ],
-    },
-    expectAnswer: 'box answer',
-  },
-  {
-    provider: 'brave',
-    payload: {
-      web: {
-        results: [
-          { url: 'https://a.example/1', title: 'A', description: 'snippet a', page_age: '2026-01-01' },
-          { url: 'https://b.example/2', title: 'B', description: 'snippet b' },
-        ],
-      },
-    },
-  },
-  {
-    provider: 'exa',
-    payload: {
-      results: [
-        { url: 'https://a.example/1', title: 'A', text: 'body a', publishedDate: '2026-01-01' },
-        { url: 'https://b.example/2', title: 'B', text: 'body b' },
-      ],
-    },
+
   },
   {
     provider: 'searxng',
@@ -460,16 +414,16 @@ for (const testCase of cases) {
   });
 }
 
-await check('tavily sends a bearer token and honours maxResults', async () => {
+await check('deepseek sends a bearer token and honours maxResults', async () => {
   mockFetch(() => ({
     json: { results: Array.from({ length: 9 }, (_, i) => ({ url: `https://x/${i}`, title: `t${i}`, content: 'c' })) },
   }));
   calls.length = 0;
-  const value = await searchWith({ provider: 'tavily', apiKeys: { tavily: 'k' }, maxResults: 5 }, { query: 'q', maxResults: 3 });
+  const value = await searchWith({ provider: 'deepseek', apiKeys: { deepseek: 'k' }, maxResults: 5 }, { query: 'q', maxResults: 3 });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://api.tavily.com/search');
+  assert.equal(calls[0].url, 'https://api.deepseek.com/v1/tools/search');
   assert.equal(calls[0].init.headers.authorization, 'Bearer k');
-  assert.equal(JSON.parse(calls[0].init.body).max_results, 3);
+  assert.equal(JSON.parse(calls[0].init.body).count, 3, 'the official API takes count, not max_results');
   assert.equal(value.sources.length, 3);
   assert.equal(value.truncated, true);
 });
@@ -477,15 +431,18 @@ await check('tavily sends a bearer token and honours maxResults', async () => {
 await check('a per-call provider override wins over the saved one', async () => {
   mockFetch(() => ({ json: { web: { results: [{ url: 'https://b/1', title: 'B' }] } } }));
   calls.length = 0;
-  const value = await searchWith({ provider: 'tavily', apiKeys: { tavily: 'k', brave: 'k' } }, { query: 'q', provider: 'brave' });
-  assert.equal(value.provider, 'brave');
-  assert.match(calls[0].url, /api\.search\.brave\.com/);
+  const value = await searchWith(
+    { provider: 'aggregate', apiKeys: { deepseek: 'k' } },
+    { query: 'q', provider: 'deepseek' },
+  );
+  assert.equal(value.provider, 'deepseek');
+  assert.match(calls[0].url, /api\.deepseek\.com/);
 });
 
 await check('a missing key fails with a settings instruction', async () => {
-  await assert.rejects(() => searchWith({ provider: 'brave', apiKeys: {} }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'deepseek', apiKeys: {} }), (error) => {
     assert.match(error.message, /设置 → 网络搜索/);
-    assert.match(error.message, /Brave/);
+    assert.match(error.message, /DeepSeek/);
     return true;
   });
 });
@@ -512,18 +469,18 @@ await check('an unknown provider lists the supported ids', async () => {
 
 await check('401 points at the key and 429 at the quota', async () => {
   mockFetch(() => ({ status: 401, text: 'unauthorized' }));
-  await assert.rejects(() => searchWith({ provider: 'brave', apiKeys: { brave: 'wrong' } }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'deepseek', apiKeys: { deepseek: 'wrong' } }), (error) => {
     assert.match(error.message, /API Key 无效/);
     assert.match(error.message, /unauthorized/);
     return true;
   });
   mockFetch(() => ({ status: 429, text: 'slow down' }));
-  await assert.rejects(() => searchWith({ provider: 'brave', apiKeys: { brave: 'x' } }), /额度/);
+  await assert.rejects(() => searchWith({ provider: 'deepseek', apiKeys: { deepseek: 'x' } }), /额度/);
 });
 
 await check('a vendor 5xx surfaces the status and a body excerpt', async () => {
   mockFetch(() => ({ status: 503, text: '<html>maintenance</html>' }));
-  await assert.rejects(() => searchWith({ provider: 'exa', apiKeys: { exa: 'k' } }), (error) => {
+  await assert.rejects(() => searchWith({ provider: 'deepseek', apiKeys: { deepseek: 'k' } }), (error) => {
     assert.match(error.message, /HTTP 503/);
     assert.match(error.message, /maintenance/);
     return true;
@@ -534,21 +491,21 @@ await check('a vendor 5xx surfaces the status and a body excerpt', async () => {
 
 await check('render output is model-readable', () => {
   const text = renderSearch({
-    provider: 'tavily',
-    providerLabel: 'Tavily',
+    provider: 'deepseek',
+    providerLabel: 'DeepSeek 官方',
     query: 'q',
     answer: 'because',
     sources: [{ url: 'https://a', title: 'A', snippet: 's', publishedAt: '2026-01-01' }],
     truncated: false,
   });
-  assert.match(text, /Tavily · "q" · 1 条结果/);
+  assert.match(text, /DeepSeek 官方 · "q" · 1 条结果/);
   assert.match(text, /摘要：because/);
   assert.match(text, /1\. A/);
   assert.match(text, /发布时间：2026-01-01/);
 });
 
 await check('render says so when a search finds nothing', () => {
-  const text = renderSearch({ provider: 'brave', providerLabel: 'Brave', query: 'q', sources: [], truncated: false });
+  const text = renderSearch({ provider: 'deepseek', providerLabel: 'DeepSeek 官方', query: 'q', sources: [], truncated: false });
   assert.match(text, /没有结果/);
 });
 
@@ -835,59 +792,58 @@ async function callApi(request) {
 }
 
 await check('GET /settings returns the masked view', async () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKeys: { brave: 'abcdefghijkl' } });
+  writeSettings({ ...normalizeSettings({}), provider: 'deepseek', apiKeys: { deepseek: 'abcdefghijkl' } });
   const answer = await callApi(
     fakeRequest({ method: 'GET', url: '/api/web-search-pro/settings', headers: { host: 'x' } }),
   );
   assert.equal(answer.status, 200);
-  assert.equal(answer.json.settings.provider, 'brave');
-  assert.equal(answer.json.settings.apiKeys.brave.has, true);
+  assert.equal(answer.json.settings.provider, 'deepseek');
+  assert.equal(answer.json.settings.apiKeys.deepseek.has, true);
   assert.ok(!JSON.stringify(answer.json).includes('abcdefghijkl'), 'the key crossed the wire');
 });
 
 await check('POST /settings persists a patch and keeps an untouched key', async () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKeys: { brave: 'stored-key' } });
+  writeSettings({ ...normalizeSettings({}), provider: 'deepseek', apiKeys: { deepseek: 'stored-key' } });
   const answer = await callApi(
     fakeRequest({
       method: 'POST',
       url: '/api/web-search-pro/settings',
       headers: { host: 'x', 'content-type': 'application/json' },
-      body: JSON.stringify({ provider: 'exa', maxResults: 4 }),
+      body: JSON.stringify({ provider: 'deepseek', maxResults: 4 }),
     }),
   );
   assert.equal(answer.status, 200);
-  assert.equal(answer.json.settings.provider, 'exa');
+  assert.equal(answer.json.settings.provider, 'deepseek');
   assert.equal(answer.json.settings.maxResults, 4);
-  assert.equal(answer.json.settings.apiKeys.brave.has, true, 'the stored key was dropped');
-  assert.equal(readSettings().settings.apiKeys.brave, 'stored-key');
+  assert.equal(answer.json.settings.apiKeys.deepseek.has, true, 'the stored key was dropped');
+  assert.equal(readSettings().settings.apiKeys.deepseek, 'stored-key');
 });
 
 await check('POST /settings clears the key on an explicit empty string', async () => {
-  writeSettings({ ...normalizeSettings({}), apiKeys: { brave: 'stored-key', exa: 'kept' } });
+  writeSettings({ ...normalizeSettings({}), apiKeys: { deepseek: 'stored-key' } });
   const answer = await callApi(
     fakeRequest({
       method: 'POST',
       url: '/api/web-search-pro/settings',
       headers: { host: 'x' },
-      body: JSON.stringify({ apiKeys: { brave: '' } }),
+      body: JSON.stringify({ apiKeys: { deepseek: '' } }),
     }),
   );
   assert.equal(answer.status, 200);
-  assert.equal(answer.json.settings.apiKeys.brave.has, false);
-  assert.equal(answer.json.settings.apiKeys.exa.has, true, 'clearing one provider must leave the others');
-  assert.deepEqual(readSettings().settings.apiKeys, { exa: 'kept' });
+  assert.equal(answer.json.settings.apiKeys.deepseek.has, false);
+  assert.deepEqual(readSettings().settings.apiKeys, {}, 'the only slot was cleared');
 });
 
 await check('POST /test reports a real search and a real failure', async () => {
-  writeSettings({ ...normalizeSettings({}), provider: 'brave', apiKey: 'k' });
-  mockFetch(() => ({ json: { web: { results: [{ url: 'https://a/1', title: 'A', description: 'd' }] } } }));
+  writeSettings({ ...normalizeSettings({}), provider: 'deepseek', apiKey: 'k' });
+  mockFetch(() => ({ json: { results: [{ url: 'https://a/1', title: 'A', summary: 'd' }] } }));
   const good = await callApi(
     fakeRequest({ method: 'POST', url: '/api/web-search-pro/test', headers: { host: 'x' }, body: '{}' }),
   );
   assert.equal(good.status, 200);
   assert.equal(good.json.ok, true);
   assert.equal(good.json.count, 1);
-  assert.equal(good.json.provider, 'brave');
+  assert.equal(good.json.provider, 'deepseek');
   assert.ok(typeof good.json.elapsedMs === 'number');
 
   mockFetch(() => ({ status: 401, text: 'nope' }));
@@ -905,7 +861,7 @@ await check('a cross-origin request is refused', async () => {
       method: 'POST',
       url: '/api/web-search-pro/settings',
       headers: { host: 'local', origin: 'https://evil.example' },
-      body: JSON.stringify({ provider: 'exa' }),
+      body: JSON.stringify({ provider: 'deepseek' }),
     }),
   );
   assert.equal(answer.status, 403);
@@ -914,7 +870,7 @@ await check('a cross-origin request is refused', async () => {
       method: 'POST',
       url: '/api/web-search-pro/settings',
       headers: { host: 'local', origin: 'http://local' },
-      body: JSON.stringify({ provider: 'exa' }),
+      body: JSON.stringify({ provider: 'deepseek' }),
     }),
   );
   assert.equal(sameOrigin.status, 200);
@@ -1107,10 +1063,10 @@ await check('the handler accepts a path whose prefix was already stripped', asyn
   assert.equal(get.status, 200, 'a stripped GET must not 404');
   assert.equal(get.json.settings.provider, 'baidu');
   const post = await callApi(
-    fakeRequest({ method: 'POST', url: '/settings', headers: { host: 'x' }, body: JSON.stringify({ provider: 'exa' }) }),
+    fakeRequest({ method: 'POST', url: '/settings', headers: { host: 'x' }, body: JSON.stringify({ provider: 'deepseek' }) }),
   );
   assert.equal(post.status, 200, 'a stripped POST must not 404');
-  assert.equal(post.json.settings.provider, 'exa');
+  assert.equal(post.json.settings.provider, 'deepseek');
 });
 
 fs.rmSync(home, { recursive: true, force: true });

@@ -259,38 +259,6 @@ window.__ModuleLoader__.load({
 				docs: 'https://api-docs.deepseek.com/guides/search',
 				endpoints: ['https://api.deepseek.com/v1/tools/search'],
 			},
-			{
-				id: 'tavily',
-				label: 'Tavily',
-				needsKey: true,
-				mode: 'api',
-				docs: 'https://app.tavily.com/home',
-				endpoints: ['https://api.tavily.com/search'],
-			},
-			{
-				id: 'serper',
-				label: 'Serper (Google)',
-				needsKey: true,
-				mode: 'api',
-				docs: 'https://serper.dev/api-key',
-				endpoints: ['https://google.serper.dev/search'],
-			},
-			{
-				id: 'brave',
-				label: 'Brave Search',
-				needsKey: true,
-				mode: 'api',
-				docs: 'https://api.search.brave.com/app/keys',
-				endpoints: ['https://api.search.brave.com/res/v1/web/search'],
-			},
-			{
-				id: 'exa',
-				label: 'Exa',
-				needsKey: true,
-				mode: 'api',
-				docs: 'https://dashboard.exa.ai/api-keys',
-				endpoints: ['https://api.exa.ai/search'],
-			},
 		];
 
 		/** A provider nobody recognised still shows something usable in the hint. */

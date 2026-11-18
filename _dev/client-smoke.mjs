@@ -184,8 +184,8 @@ function textOf(tree) {
 }
 
 const View = {
-  provider: 'brave',
-  apiKeys: { brave: { has: true, preview: 'abcd…wxyz' } },
+  provider: 'deepseek',
+  apiKeys: { deepseek: { has: true, preview: 'abcd…wxyz' } },
   endpoint: '',
   maxResults: 8,
   timeoutMs: 20000,
@@ -271,7 +271,7 @@ await check('the ready page renders every field', () => {
   const inputs = nodes.filter((node) => node.type === 'input');
   const selects = nodes.filter((node) => node.type === 'select');
   const options = nodes.filter((node) => node.type === 'option');
-  assert.ok(options.length >= 12, 'engine options plus endpoint presets');
+  assert.ok(options.length >= 8, 'engine options plus endpoint presets');
   assert.equal(inputs.length, 6, `expected 6 inputs, saw ${inputs.length}`);
   assert.equal(selects.length, 1, 'expected the provider select');
   // `datalist` also renders options, so engines are counted per optgroup below.
@@ -279,8 +279,8 @@ await check('the ready page renders every field', () => {
   assert.equal(groups.length, 2, 'expected the no-key and keyed groups');
   assert.deepEqual(groups.map((node) => node.props.label), ['免密钥（开箱即用）', '需要 API Key']);
   assert.equal(groups[0].children.length, 7, 'no-key group: aggregate, the no-key fan-out, and the 5 keyless engines');
-  assert.equal(groups[1].children.length, 5, 'keyed group: the official API plus the four third-party ones');
-  assert.equal(groups[0].children.length + groups[1].children.length, 12, 'every engine appears exactly once');
+  assert.equal(groups[1].children.length, 1, 'keyed group holds only the official API now');
+  assert.equal(groups[0].children.length + groups[1].children.length, 8, 'every engine appears exactly once');
   const types = inputs.map((node) => node.props.type);
   assert.ok(types.includes('password'), 'the key field should be masked');
   assert.equal(types.filter((type) => type === 'number').length, 3, 'expected three number inputs');
@@ -354,14 +354,14 @@ await check('the page tells the user how to verify and offers a real test', () =
 await check('a successful probe reports the provider, count and elapsed time', () => {
   const probe = {
     ok: true,
-    provider: 'brave',
-    providerLabel: 'Brave Search',
+    provider: 'deepseek',
+    providerLabel: 'DeepSeek 官方',
     count: 3,
     elapsedMs: 412,
     sources: [{ url: 'https://a/1', title: 'A' }, { url: 'https://b/2', title: 'B' }],
   };
   const text = textOf(renderWith(pageState({ probe })));
-  assert.match(text, /搜索可用 · Brave Search · 3 条来源 · 412ms/);
+  assert.match(text, /搜索可用 · DeepSeek 官方 · 3 条来源 · 412ms/);
   assert.match(text, /1\. A/);
 });
 
@@ -393,9 +393,9 @@ await check('wholeNumber enforces its range and rejects junk', () => {
 });
 
 await check('pick always leaves every key slot empty', () => {
-  const draft = pick({ ...View, apiKeys: { brave: { has: true, preview: 'x' } }, apiKey: 'must-not-appear' });
+  const draft = pick({ ...View, apiKeys: { deepseek: { has: true, preview: 'x' } }, apiKey: 'must-not-appear' });
   assert.deepEqual(draft.apiKeys, {}, 'a draft never carries a key from the Host');
-  assert.equal(draft.provider, 'brave');
+  assert.equal(draft.provider, 'deepseek');
   assert.equal(draft.maxResults, '8', 'numbers are strings while editing');
 });
 
@@ -419,7 +419,7 @@ await check('an unknown provider id falls back to a real entry', () => {
   assert.equal(providerOf('nope').id, 'aggregate', 'unknown ids fall back to the default mode');
   assert.equal(providerOf('searxng').needsKey, false);
   assert.equal(providerOf('baidu').needsKey, false);
-  assert.equal(providerOf('tavily').needsKey, true);
+  assert.equal(providerOf('deepseek').needsKey, true);
   assert.equal(providerOf('all').mode, 'fanout');
   for (const item of exports.__test.PROVIDERS) {
     // The fan-out is not a site, so it has no page to link to.
