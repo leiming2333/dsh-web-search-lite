@@ -155,7 +155,10 @@ const PROVIDERS = {
     endpoint: 'https://api.deepseek.com/v1/tools/search',
     needsKey: true,
     limit: 50,
-    docs: 'https://api-docs.deepseek.com/guides/search',
+    // `docs` is the page where a key is issued, matching the other providers — the
+    // settings page links it under a "get a key" label, so the API reference (in
+    // docs/deepseek-api.md) is the wrong target here.
+    docs: 'https://platform.deepseek.com/api_keys',
   },
 }
 

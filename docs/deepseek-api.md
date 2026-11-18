@@ -29,6 +29,8 @@
 
 Key 形如 `sk-xxxxxxxxxxxxxxxx`。
 
+想先看接口规格（请求字段、响应结构、错误码）：<https://api-docs.deepseek.com/guides/search>
+
 ### 充值
 
 搜索按次计费，账户里要有余额：

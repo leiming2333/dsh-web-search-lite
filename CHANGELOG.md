@@ -1,5 +1,11 @@
 # 变更记录
 
+## 1.7.1 — 2026-11-18
+
+### 修正
+
+- 设置页「获取密钥」的链接原本指向**接口文档**（`api-docs.deepseek.com`），点过去找不到申请入口。改成 <https://platform.deepseek.com/api_keys>，和 Tavily / Serper 那几家的约定一致。接口参考挪到 `docs/deepseek-api.md` 里单独给了地址。
+
 ## 1.7.0 — 2026-11-18
 
 ### 新增

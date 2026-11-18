@@ -262,7 +262,7 @@ window.__ModuleLoader__.load({
 				label: 'DeepSeek 官方',
 				needsKey: true,
 				mode: 'api',
-				docs: 'https://api-docs.deepseek.com/guides/search',
+				docs: 'https://platform.deepseek.com/api_keys',
 				endpoints: ['https://api.deepseek.com/v1/tools/search'],
 			},
 		];
