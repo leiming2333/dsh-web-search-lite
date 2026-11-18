@@ -1,5 +1,18 @@
 # 变更记录
 
+## 1.6.0 — 2026-11-18
+
+### 新增
+
+- **DeepSeek 官方搜索**（`deepseek` provider）：接官方 `POST /v1/tools/search`，和模型 API 共用同一个 key。结果里的 `summary`（600–800 字，给模型读）优先于 `snippet`（100–200 字，给界面显示）。
+- 它是唯一支持**查询语法**的一家：`site:`、`-site:`、`"精确短语"`、`lang:zh`、`after:2025-01-01`、`before:` 都原样传给官方引擎。其余几家是拼 URL 抓结果页，没有这层能力。
+- 计费 $0.75/千次成功请求，**空结果和失败不计费**，QPS 100。
+- 文档新增 [DeepSeek 官方](docs/api-providers.md#deepseek-官方) 一节，并说明一个容易踩的坑：DSH 内置搜索设成 **DeepSeek (Legacy)** 时搜索走服务端工具、**不按次收费**（只算 token）；设成 **DeepSeek Search API** 或走本插件才是按次计费。只是想让模型自己搜的话，Legacy 更省钱。
+
+### 文档
+
+- API 提供方从四家变成五家，选型表把「已有 DeepSeek API key」放在第一位。
+
 ## 1.5.0 — 2026-11-16
 
 ### 新增

@@ -354,6 +354,23 @@ function searchWith(settings, args = { query: 'hello world' }) {
 
 const cases = [
   {
+    provider: 'deepseek',
+    payload: {
+      results: [
+        {
+          rerank_score: 2.4,
+          title: 'A',
+          url: 'https://a.example/1',
+          snippet: 'short a',
+          summary: 'long summary a',
+          date: '2026-01-01T00:00:00+00:00',
+        },
+        { rerank_score: 1.1, title: 'dup', url: 'https://a.example/1', snippet: 'dup', summary: 'dup' },
+        { rerank_score: 1.8, title: 'B', url: 'https://b.example/2', snippet: 'short b', summary: 'long summary b' },
+      ],
+    },
+  },
+  {
     provider: 'tavily',
     payload: {
       answer: 'an answer',
@@ -406,6 +423,20 @@ const cases = [
     },
   },
 ];
+
+await check('deepseek feeds the model the long summary, not the short snippet', async () => {
+  mockFetch(() => ({
+    json: {
+      results: [
+        { title: 'A', url: 'https://a.example/1', snippet: 'short', summary: 'long', date: '2026-01-01T00:00:00+00:00' },
+      ],
+    },
+  }));
+  const value = await searchWith({ provider: 'deepseek', apiKeys: { deepseek: 'sk-test' } });
+  assert.equal(value.sources.length, 1);
+  assert.equal(value.sources[0].snippet, 'long', 'the model-facing summary should win over the UI snippet');
+  assert.equal(value.sources[0].publishedAt, '2026-01-01T00:00:00+00:00');
+});
 
 for (const testCase of cases) {
   mockFetch(() => ({ json: testCase.payload }));

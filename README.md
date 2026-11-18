@@ -84,6 +84,7 @@ query
 
 | `provider` | 服务 | 密钥申请 | 备注 |
 |---|---|---|---|
+| `deepseek` | DeepSeek 官方 | https://platform.deepseek.com/api_keys | 官方自研索引，支持 site:/lang:/after: 等查询语法 |
 | `tavily` | Tavily | https://app.tavily.com/home | 返回网页正文，可带生成式摘要 |
 | `serper` | Serper（Google 结果） | https://serper.dev/api-key | 结果最接近 Google，可带 answerBox |
 | `brave` | Brave Search | https://api.search.brave.com/app/keys | 独立索引 |

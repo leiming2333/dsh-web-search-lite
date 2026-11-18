@@ -149,6 +149,14 @@ const PROVIDERS = {
     limit: 50,
     docs: 'https://docs.searxng.org/dev/search_api.html',
   },
+  deepseek: {
+    label: 'DeepSeek 官方',
+    mode: 'api',
+    endpoint: 'https://api.deepseek.com/v1/tools/search',
+    needsKey: true,
+    limit: 50,
+    docs: 'https://api-docs.deepseek.com/guides/search',
+  },
   tavily: {
     label: 'Tavily',
     mode: 'api',
@@ -819,6 +827,38 @@ async function searchBaidu(provider, cfg, query, count, signal) {
   }, cfg, query, count, signal)
 }
 
+/**
+ * DeepSeek's own Search API: POST /v1/tools/search, Bearer key.
+ *
+ * Results carry two summaries — a short `snippet` for display and a long `summary`
+ * meant for a model to read. This plugin feeds a model, so it prefers the latter.
+ */
+async function searchDeepseek(provider, cfg, query, count, signal) {
+  const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${providerKey(cfg, 'deepseek')}`,
+    },
+    body: JSON.stringify({
+      query,
+      count: Math.min(count, provider.limit),
+      need_content: false,
+    }),
+    signal,
+  })
+  return {
+    sources: collect(
+      (Array.isArray(payload.results) ? payload.results : []).map((row) => ({
+        url: row.url,
+        title: row.title,
+        snippet: row.summary || row.snippet,
+        publishedAt: row.date,
+      })),
+    ),
+  }
+}
+
 /** Tavily: POST /search, key in the Authorization header, optional direct answer. */
 async function searchTavily(provider, cfg, query, count, signal) {
   const payload = await requestJson(provider, cfg.endpoint || provider.endpoint, {
@@ -963,6 +1003,7 @@ const SEARCHERS = {
   baidu: searchBaidu,
   so360: searchSo360,
   searxng: searchSearxng,
+  deepseek: searchDeepseek,
   tavily: searchTavily,
   serper: searchSerper,
   brave: searchBrave,

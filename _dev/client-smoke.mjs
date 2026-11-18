@@ -279,8 +279,8 @@ await check('the ready page renders every field', () => {
   assert.equal(groups.length, 2, 'expected the no-key and keyed groups');
   assert.deepEqual(groups.map((node) => node.props.label), ['免密钥（开箱即用）', '需要 API Key']);
   assert.equal(groups[0].children.length, 7, 'no-key group: aggregate, the no-key fan-out, and the 5 keyless engines');
-  assert.equal(groups[1].children.length, 4, 'keyed group holds the 4 API providers still on sale');
-  assert.equal(groups[0].children.length + groups[1].children.length, 11, 'every engine appears exactly once');
+  assert.equal(groups[1].children.length, 5, 'keyed group: the official API plus the four third-party ones');
+  assert.equal(groups[0].children.length + groups[1].children.length, 12, 'every engine appears exactly once');
   const types = inputs.map((node) => node.props.type);
   assert.ok(types.includes('password'), 'the key field should be masked');
   assert.equal(types.filter((type) => type === 'number').length, 3, 'expected three number inputs');

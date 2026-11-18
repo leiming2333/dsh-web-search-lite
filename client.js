@@ -252,6 +252,14 @@ window.__ModuleLoader__.load({
 				endpoints: ['http://localhost:8888/search', 'http://127.0.0.1:8080/search'],
 			},
 			{
+				id: 'deepseek',
+				label: 'DeepSeek 官方',
+				needsKey: true,
+				mode: 'api',
+				docs: 'https://api-docs.deepseek.com/guides/search',
+				endpoints: ['https://api.deepseek.com/v1/tools/search'],
+			},
+			{
 				id: 'tavily',
 				label: 'Tavily',
 				needsKey: true,
