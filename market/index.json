@@ -40,8 +40,8 @@
         "zh": "网络搜索 Lite"
       },
       "description": {
-        "zh": "聚合模式：同时查询 DuckDuckGo / Bing 网页 / 百度 / 360，外加所有填了 Key 的 API 提供方（Tavily、Serper、Brave、Exa、Bing API），合并去重。零依赖，不配 Key 也能直接用。",
-        "en": "Aggregate mode queries DuckDuckGo, Bing, Baidu and 360 together with every API provider that has a key (Tavily, Serper, Brave, Exa, Bing API), then merges and de-duplicates. Zero dependencies; works with no key at all."
+        "zh": "免密钥联网搜索：同时查询 DuckDuckGo / Bing 网页 / 百度 / 360，合并去重。可选接入 DeepSeek 官方搜索 API（支持 site:/lang:/after: 等查询语法），也可接自建 SearXNG。",
+        "en": "Key-free search across DuckDuckGo, Bing, Baidu and 360, merged and de-duplicated. Optionally add DeepSeek's official Search API (query operators like site:/lang:/after:) or your own SearXNG instance."
       },
       "icon": "icon.svg",
       "author": "leiming2333",
@@ -67,6 +67,15 @@
         ]
       },
       "versions": [
+        {
+          "version": "1.6.0",
+          "publishTimestamp": 1794990998,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/leiming2333/dsh-web-search-lite",
+            "commit": "db19c7a45d77a87d32972c1020483c9521f471e8"
+          }
+        },
         {
           "version": "1.4.1",
           "publishTimestamp": 1794332977,
